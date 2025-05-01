@@ -11,7 +11,7 @@ import time
 # HUOM!
 # KÄYNNISTÄ ENSIN SELAIN COMMAND PROMPTISSA KOMENNOLLA (Mukaan myös lainausmerkit):
 # "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="C:\Temp\EdgeProfile"
-
+# HUOM! 
 # Asetetaan Edge käyttämään etäohjausporttia
 edge_options = Options()
 edge_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")

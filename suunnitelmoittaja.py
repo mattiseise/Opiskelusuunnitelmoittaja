@@ -10,6 +10,7 @@ import time
 
 # HUOM!
 # KÄYNNISTÄ ENSIN SELAIN COMMMAND PROMPTISSA KOMENNOLLA: "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="C:\Temp\EdgeProfile"
+#Mikäli remote-debugging sessio ei ole oikein auki, se johtaa siihen, että tämä antaa virheen, että XPATH, '//*[@id="f-prepeater9700__add" ei ole olemassa tai se on muuttunut. Vika ei ole oikeasti siinä, vaan sinä, että se viittaa väärään selainistunoon.
 
 
 # Asetetaan Edge käyttämään etäohjausporttia
