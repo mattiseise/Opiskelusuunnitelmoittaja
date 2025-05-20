@@ -7,12 +7,43 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 import pandas as pd
 import time
+import os
+import platform
+import subprocess
+from pathlib import Path
 
 # HUOM!
-# KÄYNNISTÄ ENSIN SELAIN COMMAND PROMPTISSA KOMENNOLLA (Mukaan myös lainausmerkit):
+# Katso README.md käyttöohjeisiin.
+# Käynnistä ensin selain etäohjauksella.
+# Windowsissa komento on:
 # "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --remote-debugging-port=9222 --user-data-dir="C:\Temp\EdgeProfile"
-# HUOM! 
+# MacOS:ssa komento on:
+# "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" --remote-debugging-port=9222 --user-data-dir="/tmp/EdgeProfile"
+# HUOM!
+
+def launch_edge_remote(port: int = 9222) -> None:
+    """Käynnistää Edgen remote-debugging -tilassa, jos polku löytyy."""
+    system = platform.system()
+    if system == "Windows":
+        edge_path = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
+        profile_dir = Path(r"C:\Temp\EdgeProfile")
+    elif system == "Darwin":
+        edge_path = Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
+        profile_dir = Path("/tmp/EdgeProfile")
+    else:
+        print("Edgeä ei tueta automaattisesti tällä käyttöjärjestelmällä. Käynnistä selain käsin.")
+        return
+
+    if not edge_path.exists():
+        print(f"Edgeä ei löytynyt polusta {edge_path}. Käynnistä selain käsin.")
+        return
+
+    args = [str(edge_path), f"--remote-debugging-port={port}", f"--user-data-dir={profile_dir}"]
+    subprocess.Popen(args)
+    time.sleep(2)
+
 # Asetetaan Edge käyttämään etäohjausporttia
+launch_edge_remote()
 edge_options = Options()
 edge_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
 
@@ -30,9 +61,9 @@ if 'driver' in locals():
     
     # Luetaan Excel-tiedosto ja kysytään käyttäjältä, mitkä sheetit täytetään
     try:
-        excel_file = 'D:/Programming/Opiskelusuunnitelmoittaja/Opintosuunnitelmat.xlsx'
+        excel_file = Path(__file__).resolve().parent / 'Opintosuunnitelmat.xlsx'
         xls = pd.ExcelFile(excel_file)
-        print("Excel-tiedosto luettu onnistuneesti.")
+        print(f"Excel-tiedosto {excel_file} luettu onnistuneesti.")
     except Exception as e:
         print(f"Excel-tiedoston lukeminen epäonnistui: {e}")
         driver.quit()
