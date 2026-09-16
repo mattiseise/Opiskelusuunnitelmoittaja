@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fi">
+<head><meta charset="utf-8"><title>Testilomake – opiskelusuunnitelma</title></head>
+<body>
+<div><div><div><div>
+<main>
+  <form>
+    <div>
+      <div>
+        <div>
+          <div>
+            <table>
+              <thead>
+                <tr><th>Osaamistavoite</th><th>Laajuus</th><th>Suoritustapa</th><th>Ajankohta</th></tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button type="button" id="f-prepeater9700__add">Lisää rivi</button>
+  </form>
+</main>
+</div></div></div></div>
+<script>
+  // Jäljittelee lomakegeneraattoria: rivi ilmestyy pienellä viiveellä.
+  document.getElementById('f-prepeater9700__add').addEventListener('click', () => {
+    setTimeout(() => {
+      const tr = document.createElement('tr');
+      for (let i = 0; i < 4; i++) {
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.name = `rivi[${document.querySelectorAll('#rows > tr').length}][${i}]`;
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      document.getElementById('rows').appendChild(tr);
+    }, 50);
+  });
+</script>
+</body>
+</html>

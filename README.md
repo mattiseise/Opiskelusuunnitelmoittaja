@@ -1,215 +1,162 @@
-# Opiskelusuunnitelmoittaja - Study Plan Form Filler
+# Opiskelusuunnitelmoittaja
 
-Automated form filling tool for study plans using Chrome WebDriver. This tool reads data from Excel files and automatically fills web forms, with robust error handling and retry logic.
+Täyttää opiskelusuunnitelmalomakkeen selaimessa Excel-taulukosta rivi kerrallaan, jotta samaa
+taulukkoa ei tarvitse naputella käsin joka opiskelijalle. Työkalu kytkeytyy sinun omaan, jo
+kirjautuneeseen Chromeesi (Playwright + Chrome DevTools Protocol), joten kirjautumisia tai
+salasanoja ei tarvitse antaa skriptille.
 
-## Features
+Versio 2 on kirjoitettu uusiksi: Selenium ja webdriver-manager on korvattu Playwrightilla,
+pandas openpyxl:llä, ja projekti käyttää `pyproject.toml`-määrittelyä ja `uv`-työkalua.
+Toimii macOS:llä, Windowsilla ja Linuxilla.
 
-- **Chrome WebDriver Integration**: Uses Chrome browser with remote debugging
-- **Excel Data Processing**: Reads multiple sheets from Excel files (.xlsx)
-- **Robust Error Handling**: Retry logic with exponential backoff
-- **Modular Architecture**: Clean separation of concerns with dedicated classes
-- **Comprehensive Logging**: Detailed logging with configurable levels
-- **Command Line Interface**: Interactive and automated modes
-- **Data Validation**: Validates Excel data before processing
-- **Progress Tracking**: Real-time progress updates and summary reports
+## Vaatimukset
 
-## Installation
+- Python 3.12 tai uudempi
+- [uv](https://docs.astral.sh/uv/) (`brew install uv` tai `pipx install uv`)
+- Google Chrome
 
-1. **Clone or download the project**
-2. **Install Python dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Ensure Chrome browser is installed**
+## Asennus
 
-## Setup
-
-### Chrome Browser Configuration
-
-The application requires Chrome to run with remote debugging enabled:
-
-1. **Close all Chrome windows**
-2. **Open Command Prompt as Administrator**
-3. **Run the Chrome launch command**:
-   ```cmd
-   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\\Temp\\ChromeProfile"
-   ```
-4. **Navigate to your form page in the opened Chrome window**
-
-### Excel File Preparation
-
-Ensure your Excel file (`Opintosuunnitelmat.xlsx`) contains sheets with the following columns:
-- `Osaamistavoite` - Learning objective
-- `Laajuus` - Scope/Credits  
-- `Suoritustapa / osaaminen hankitaan` - Method of completion
-- `Suoritusajankohta` - Completion time
-
-## Usage
-
-### Basic Usage (Interactive Mode)
 ```bash
-python main.py
+git clone https://github.com/mattiseise/Opiskelusuunnitelmoittaja
+cd Opiskelusuunnitelmoittaja
+uv sync
 ```
 
-### Command Line Options
+`uv sync` luo virtuaaliympäristön `.venv/` ja asentaa riippuvuudet. Komennot ajetaan
+`uv run suunnitelmoittaja ...` -muodossa (tai aktivoi `.venv` ja jätä `uv run` pois).
+
+## Käyttö
+
+Kolme askelta:
+
+**1. Käynnistä Chrome etädebuggauksella.**
+
 ```bash
-# List available sheets
-python main.py --list-sheets
-
-# Process specific sheets (by number)
-python main.py --sheets 1,3,5
-
-# Use custom Excel file
-python main.py --excel "path/to/your/file.xlsx"
-
-# Use custom configuration
-python main.py --config "custom_config.json"
-
-# Enable debug logging
-python main.py --debug
+uv run suunnitelmoittaja chrome
 ```
 
-### Complete Example
+Komento käynnistää Chromen erilliseen profiiliin (`~/.opiskelusuunnitelmoittaja/chrome-profile`)
+portti 9222 auki. Erillinen profiili on pakollinen, koska Chrome 136 ja uudemmat eivät salli
+etädebuggausta oletusprofiilissa. Kirjautumiset säilyvät profiilissa kertojen välillä, joten
+kirjautuminen tarvitsee tehdä vain kerran.
+
+Jos haluat käynnistää Chromen käsin, `uv run suunnitelmoittaja chrome --print` tulostaa
+komennon omalle käyttöjärjestelmällesi. macOS:llä se on:
+
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Start Chrome with remote debugging (as Administrator)
-"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:\\Temp\\ChromeProfile"
-
-# Navigate to your form page in Chrome
-
-# Run the application
-python main.py --sheets 1,2 --debug
+open -na "Google Chrome" --args --remote-debugging-port=9222 --user-data-dir="$HOME/.opiskelusuunnitelmoittaja/chrome-profile"
 ```
 
-## Configuration
+**2. Avaa lomakesivu** siihen Chrome-ikkunaan ja kirjaudu tarvittaessa.
 
-The application uses `config.json` for configuration. Key settings include:
+**3. Täytä lomake.**
 
-### Browser Settings
-```json
+```bash
+uv run suunnitelmoittaja sheets          # listaa Excelin välilehdet
+uv run suunnitelmoittaja fill 1,3        # täytä välilehdet 1 ja 3 (numerot tai nimet)
+uv run suunnitelmoittaja fill            # kysyy välilehdet
+uv run suunnitelmoittaja fill 2 --dry-run   # näytä mitä täytettäisiin, älä koske selaimeen
+```
+
+Työkalu etsii avoimista välilehdistä sen, jolla lomaketaulukko on, lisää taulukkoon rivin
+jokaista Excel-riviä kohti ja täyttää solut. Välilehtien väliin lisätään tyhjä välirivi
+(`--no-separator` poistaa sen). Lopuksi tulostuu yhteenveto; virheet kirjataan lokiin
+`logs/app.log`. Lisää `-v` nähdäksesi etenemislokin konsolissa, `--debug` yksityiskohdat.
+
+## Excel-tiedoston rakenne
+
+Jokainen välilehti on yksi suunnitelma. Ensimmäinen rivi on otsikkorivi, ja siltä pitää
+löytyä nämä otsikot (kirjainkoko ja ylimääräiset välilyönnit eivät haittaa):
+
+| Otsikko                              | Lomakkeen kenttä  |
+| ------------------------------------ | ----------------- |
+| `Osaamistavoite`                     | osaamistavoite    |
+| `Laajuus`                            | laajuus           |
+| `Suoritustapa / osaaminen hankitaan` | suoritustapa      |
+| `Suoritusajankohta`                  | suoritusajankohta |
+
+Kokonaan tyhjät rivit ohitetaan. Numerot muotoillaan siististi (`25.0` → `25`), päivämäärät
+muotoon `pp.kk.vvvv`. Tyhjä solu täytetään lomakkeelle välilyönnillä, koska lomake ei
+hyväksy tyhjää kenttää (muutettavissa asetuksella `empty_value`).
+
+Otsikot voi nimetä toisin `config.json`-tiedoston `excel_columns`-osiossa.
+
+## Asetukset (`config.json`)
+
+Kaikki avaimet ovat valinnaisia; puuttuvat täydennetään oletuksilla.
+
+```jsonc
 {
+  "files": { "excel_file": "Opintosuunnitelmat.xlsx", "log_file": "logs/app.log" },
   "browser": {
-    "type": "chrome",
     "remote_debugging_port": 9222,
-    "user_data_dir": "C:\\\\Temp\\\\ChromeProfile",
-    "wait_timeout": 10,
-    "page_load_timeout": 30
-  }
-}
-```
-
-### Selectors and Form Fields
-```json
-{
+    "user_data_dir": "",          // tyhjä = ~/.opiskelusuunnitelmoittaja/chrome-profile
+    "chrome_path": "",            // tyhjä = tunnistetaan automaattisesti
+    "page_url_contains": "",      // esim. "wilma" → valitse välilehti osoitteen perusteella
+    "timeout_ms": 10000
+  },
   "selectors": {
-    "table_tbody": "/html/body/div[2]/div/div/div[2]/div/main/form/div[1]/div/div[2]/div/div/table/tbody",
-    "add_row_button": "//*[@id=\\"f-prepeater9700__add\\"]",
-    "form_fields": {
-      "osaamistavoite": "td[1]",
-      "laajuus": "td[2]",
-      "suoritustapa": "td[3]",
-      "suoritusajankohta": "td[4]"
-    }
-  }
+    "table_body": "main form table tbody",   // CSS-valitsin (ei XPath)
+    "add_row_button": "[id$='__add']",
+    "field_cells": {
+      "osaamistavoite": "td:nth-child(1)",
+      "laajuus": "td:nth-child(2)",
+      "suoritustapa": "td:nth-child(3)",
+      "suoritusajankohta": "td:nth-child(4)"
+    },
+    "input_in_cell": "input, textarea, select"
+  },
+  "excel_columns": { "osaamistavoite": "Osaamistavoite", "...": "..." },
+  "empty_value": " ",
+  "separator_row_between_sheets": true,
+  "retry": { "max_attempts": 3, "delay_s": 1.0 },
+  "logging": { "level": "INFO" }
 }
 ```
 
-### Retry Configuration
-```json
-{
-  "retry": {
-    "max_attempts": 3,
-    "delay_between_attempts": 2,
-    "backoff_multiplier": 2
-  }
-}
-```
+Jos lomakkeen rakenne muuttuu, päivitä `selectors`-osio. Playwright hyväksyy CSS-valitsimet
+ja `xpath=`-etuliitteiset XPath-lausekkeet kaikissa kohdissa paitsi `table_body`, jonka
+pitää olla CSS.
 
-## Project Structure
+## Vianetsintä
 
-```
-Opiskelusuunnitelmoittaja/
-├── main.py                    # Main entry point
-├── config.json               # Configuration file
-├── requirements.txt          # Python dependencies
-├── README.md                 # This file
-├── Opintosuunnitelmat.xlsx   # Excel data file
-├── src/                      # Source code modules
-│   ├── __init__.py
-│   ├── browser_manager.py    # Browser WebDriver management
-│   ├── excel_handler.py      # Excel file operations
-│   ├── form_filler.py        # Web form filling logic
-│   └── utils/
-│       ├── __init__.py
-│       └── logger.py         # Logging configuration
-└── logs/
-    └── app.log               # Application log file
-```
+**"Chrome ei vastaa osoitteessa http://127.0.0.1:9222"** – Chrome ei ole käynnissä
+etädebuggauksella. Aja `uv run suunnitelmoittaja chrome`. Jos Chrome oli jo auki tavallisena,
+sulje se ensin tai anna eri `user_data_dir`.
 
-## Error Handling
+**"Lomaketta ei löytynyt miltään avoimelta välilehdeltä"** – lomakesivu ei ole auki siinä
+Chromessa, joka käynnistettiin etädebuggauksella, tai `selectors.table_body` ei osu.
+Aseta `browser.page_url_contains`, jos oikea välilehti pitää valita osoitteen perusteella.
 
-The application includes comprehensive error handling:
+**"Välilehdeltä puuttuvat sarakkeet"** – Excelin otsikkorivi ei vastaa `excel_columns`-asetusta.
+Virheilmoitus listaa löydetyt otsikot.
 
-- **Retry Logic**: Failed operations are retried with exponential backoff
-- **Graceful Degradation**: Single row failures don't stop the entire process
-- **Detailed Logging**: All errors are logged with context and timestamps
-- **User-Friendly Messages**: Clear error messages and progress updates
+**"rivin lisäys epäonnistui"** – lisäysnapin valitsin `selectors.add_row_button` ei osu.
+Tarkista napin `id` selaimen kehittäjätyökaluilla.
 
-## Logging
+## Kehitys
 
-Logs are written to both console and file (`logs/app.log`). Log levels:
-- **INFO**: General progress and status updates
-- **WARNING**: Non-critical issues that don't stop execution
-- **ERROR**: Critical errors that may affect processing
-- **DEBUG**: Detailed technical information (use `--debug` flag)
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"Failed to connect to Chrome session"**
-   - Ensure Chrome is running with remote debugging enabled
-   - Check that the port (9222) is not in use by another application
-   - Verify the Chrome launch command in config.json
-
-2. **"Excel file not found"**
-   - Check the file path in config.json
-   - Ensure the Excel file exists and is not open in another application
-
-3. **"Missing required columns"**
-   - Verify your Excel sheets have the required column names
-   - Check the column mapping in config.json
-
-4. **Form fields not found**
-   - The web form structure may have changed
-   - Update the XPath selectors in config.json
-   - Use browser developer tools to find correct selectors
-
-### Debug Mode
-
-Use debug mode for detailed troubleshooting:
 ```bash
-python main.py --debug
+uv sync                                  # asentaa myös dev-riippuvuudet
+uv run playwright install chromium       # testien selain (kerran)
+uv run pytest                            # 34 testiä, mukana oikea selaintesti
+uv run ruff check . && uv run ruff format --check .
+uv run pyright
 ```
 
-This will show:
-- Detailed WebDriver operations
-- Element selection attempts
-- Data processing steps
-- Network timeouts and retries
+Lomaketestit ajetaan oikealla Chromiumilla paikallista testilomaketta
+(`tests/fixtures/lomake.html`) vastaan. Valmiiksi asennetun selaimen voi osoittaa
+ympäristömuuttujalla `SUUNNITELMOITTAJA_CHROMIUM=/polku/chromium`.
 
-## Requirements
+Rakenne:
 
-- **Python 3.7+**
-- **Google Chrome browser**
-- **Python packages**: selenium, webdriver-manager, pandas, openpyxl
-- **Administrative privileges** (for Chrome launch command)
-
-## Support
-
-- Check the log file (`logs/app.log`) for detailed error information
-- Ensure all requirements are installed correctly
-- Verify Chrome browser setup and remote debugging configuration
-- Test with a small Excel file first to validate the setup
+```
+src/opiskelusuunnitelmoittaja/
+  cli.py        komennot chrome / sheets / fill
+  config.py     asetusten lataus ja oletukset, Chromen tunnistus
+  excel.py      Excelin luku (openpyxl), arvojen muotoilu
+  browser.py    Chromen käynnistys ja CDP-yhteys
+  filler.py     rivien lisäys ja täyttö, uudelleenyritykset, yhteenveto
+  logsetup.py   lokitus
+```

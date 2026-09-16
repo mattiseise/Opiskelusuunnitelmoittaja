@@ -1,40 +1,39 @@
 {
-    "browser": {
-        "type": "chrome",
-        "remote_debugging_port": 9222,
-        "user_data_dir": "C:\\Temp\\ChromeProfile",
-        "launch_command": "\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --remote-debugging-port=9222 --user-data-dir=\"C:\\Temp\\ChromeProfile\"",
-        "wait_timeout": 10,
-        "page_load_timeout": 30
+  "files": {
+    "excel_file": "Opintosuunnitelmat.xlsx",
+    "log_file": "logs/app.log"
+  },
+  "browser": {
+    "remote_debugging_port": 9222,
+    "user_data_dir": "",
+    "chrome_path": "",
+    "page_url_contains": "",
+    "timeout_ms": 10000
+  },
+  "selectors": {
+    "table_body": "main form table tbody",
+    "add_row_button": "[id$='__add']",
+    "field_cells": {
+      "osaamistavoite": "td:nth-child(1)",
+      "laajuus": "td:nth-child(2)",
+      "suoritustapa": "td:nth-child(3)",
+      "suoritusajankohta": "td:nth-child(4)"
     },
-    "files": {
-        "excel_file": "Opintosuunnitelmat.xlsx",
-        "log_file": "logs/app.log"
-    },
-    "selectors": {
-        "table_tbody": "/html/body/div[2]/div/div/div[2]/div/main/form/div[1]/div/div[2]/div/div/table/tbody",
-        "add_row_button": "//*[@id=\"f-prepeater9700__add\"]",
-        "form_fields": {
-            "osaamistavoite": "td[1]",
-            "laajuus": "td[2]",
-            "suoritustapa": "td[3]",
-            "suoritusajankohta": "td[4]"
-        }
-    },
-    "excel_columns": {
-        "osaamistavoite": "Osaamistavoite",
-        "laajuus": "Laajuus",
-        "suoritustapa": "Suoritustapa / osaaminen hankitaan",
-        "suoritusajankohta": "Suoritusajankohta"
-    },
-    "retry": {
-        "max_attempts": 3,
-        "delay_between_attempts": 2,
-        "backoff_multiplier": 2
-    },
-    "logging": {
-        "level": "INFO",
-        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        "console_output": true
-    }
+    "input_in_cell": "input, textarea, select"
+  },
+  "excel_columns": {
+    "osaamistavoite": "Osaamistavoite",
+    "laajuus": "Laajuus",
+    "suoritustapa": "Suoritustapa / osaaminen hankitaan",
+    "suoritusajankohta": "Suoritusajankohta"
+  },
+  "empty_value": " ",
+  "separator_row_between_sheets": true,
+  "retry": {
+    "max_attempts": 3,
+    "delay_s": 1.0
+  },
+  "logging": {
+    "level": "INFO"
+  }
 }
