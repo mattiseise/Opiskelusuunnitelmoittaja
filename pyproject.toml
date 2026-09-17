@@ -1,6 +1,6 @@
 [project]
 name = "opiskelusuunnitelmoittaja"
-version = "2.0.0"
+version = "2.1.0"
 description = "Täyttää opiskelusuunnitelmalomakkeen Excel-taulukosta Playwrightilla (Chrome CDP)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -13,7 +13,13 @@ dependencies = [
 
 [project.scripts]
 opiskelusuunnitelmoittaja = "opiskelusuunnitelmoittaja.cli:main"
+suunnitelmoittaja-gui = "opiskelusuunnitelmoittaja.gui.app:main"
 suunnitelmoittaja = "opiskelusuunnitelmoittaja.cli:main"
+
+[project.optional-dependencies]
+gui = [
+    "pyside6>=6.11.2",
+]
 
 [dependency-groups]
 dev = [
@@ -21,6 +27,9 @@ dev = [
     "pytest-playwright>=0.5",
     "ruff>=0.6",
     "pyright>=1.1.380",
+    "pyinstaller>=6.22.3",
+    "pytest-qt>=4.5.0",
+    "pillow>=12.3.0",
 ]
 
 [build-system]

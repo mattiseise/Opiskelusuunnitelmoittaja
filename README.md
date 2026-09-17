@@ -7,15 +7,45 @@ salasanoja ei tarvitse antaa skriptille.
 
 Versio 2 on kirjoitettu uusiksi: Selenium ja webdriver-manager on korvattu Playwrightilla,
 pandas openpyxl:llä, ja projekti käyttää `pyproject.toml`-määrittelyä ja `uv`-työkalua.
-Toimii macOS:llä, Windowsilla ja Linuxilla.
+Toimii macOS:llä, Windowsilla ja Linuxilla. Versiossa 2.1 on graafinen käyttöliittymä ja
+valmiit sovelluspaketit.
 
-## Vaatimukset
+## Valmis sovellus (suositus)
+
+Lataa uusin paketti [Releases-sivulta](https://github.com/mattiseise/Opiskelusuunnitelmoittaja/releases):
+macOS:lle `.dmg` (Apple Silicon), Windowsille `.zip`. Sovellus tarvitsee koneelta vain
+Google Chromen; Python tai uv ei ole tarpeen.
+
+Ensimmäisellä käynnistyksellä sovellus kopioi `config.json`-asetukset ja `Opintosuunnitelmat.xlsx`-
+pohjan käyttäjän omaan kansioon (macOS: `~/Library/Application Support/Opiskelusuunnitelmoittaja`,
+Windows: `%APPDATA%\Opiskelusuunnitelmoittaja`). Tiedosto → *Avaa asetuskansio* vie sinne.
+
+Käyttö ikkunassa:
+
+1. **Käynnistä Chrome** -nappi avaa Chromen erilliseen profiiliin. Pallo muuttuu vihreäksi,
+   kun yhteys on kunnossa.
+2. Avaa Wilman opiskelusuunnitelmalomake siihen Chrome-ikkunaan.
+3. Valitse pääsuuntaus ja rastita lisävalinnat (lukio, YTO, väylä) tai valitse välilehdet käsin.
+   Esikatselu näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
+4. **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin jälkeen.
+5. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
+
+Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset…*-ikkunassa.
+
+Paketit on allekirjoitettu ad hoc, ei Applen notarisointia. Jos macOS estää avauksen,
+valitse Järjestelmäasetukset → Tietosuoja ja suojaus → *Avaa silti*, tai aja
+`xattr -dr com.apple.quarantine /Applications/Opiskelusuunnitelmoittaja.app`. Windowsin
+SmartScreen: *Lisätietoja* → *Suorita silti*.
+
+## Komentorivi ja kehitys
+
+### Vaatimukset
 
 - Python 3.12 tai uudempi
 - [uv](https://docs.astral.sh/uv/) (`brew install uv` tai `pipx install uv`)
 - Google Chrome
 
-## Asennus
+### Asennus
 
 ```bash
 git clone https://github.com/mattiseise/Opiskelusuunnitelmoittaja
@@ -25,8 +55,9 @@ uv sync
 
 `uv sync` luo virtuaaliympäristön `.venv/` ja asentaa riippuvuudet. Komennot ajetaan
 `uv run suunnitelmoittaja ...` -muodossa (tai aktivoi `.venv` ja jätä `uv run` pois).
+GUI kehitysympäristöstä: `uv sync --extra gui && uv run suunnitelmoittaja-gui`.
 
-## Käyttö
+### Käyttö komentoriviltä
 
 Kolme askelta:
 
@@ -163,12 +194,27 @@ Tarkista napin `id` selaimen kehittäjätyökaluilla.
 ## Kehitys
 
 ```bash
-uv sync                                  # asentaa myös dev-riippuvuudet
+uv sync --extra gui                      # asentaa myös dev-riippuvuudet ja PySide6
 uv run playwright install chromium       # testien selain (kerran)
-uv run pytest                            # 45 testiä, mukana oikea selaintesti
+uv run pytest                            # 51 testiä: selaintestit + GUI offscreen
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
 ```
+
+### Sovelluspaketin rakentaminen
+
+```bash
+scripts/build.sh                                           # macOS → dist/*.app + .dmg (Linux → .tar.gz)
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1  # Windows → dist/*.zip
+```
+
+Paketointi käyttää PyInstalleria (`packaging/Opiskelusuunnitelmoittaja.spec`). Playwrightin
+Node-ajuri pakataan mukaan, selainta ei: sovellus kytkeytyy käyttäjän omaan Chromeen.
+Paketoitua sovellusta voi ajaa myös komentoriviltä: `Opiskelusuunnitelmoittaja --cli fill 1`.
+
+Julkaisu: `git tag v2.1.0 && git push --tags` käynnistää GitHub Actions -putken
+(`.github/workflows/release.yml`), joka ajaa testit, rakentaa macOS- ja Windows-paketit ja
+liittää ne GitHub Releaseen.
 
 Lomaketestit ajetaan oikealla Chromiumilla paikallista testilomaketta
 (`tests/fixtures/lomake.html`) vastaan. Valmiiksi asennetun selaimen voi osoittaa
@@ -180,6 +226,8 @@ Rakenne:
 src/opiskelusuunnitelmoittaja/
   cli.py        komennot chrome / sheets / fill
   wizard.py     ohjattu kysely (pääsuuntaus, lukio, YTO, väylä)
+  paths.py      resurssit paketissa, käyttäjän data-hakemisto
+  gui/          PySide6-käyttöliittymä (app, main_window, settings_dialog, worker)
   config.py     asetusten lataus ja oletukset, Chromen tunnistus
   excel.py      Excelin luku (openpyxl), arvojen muotoilu
   browser.py    Chromen käynnistys ja CDP-yhteys

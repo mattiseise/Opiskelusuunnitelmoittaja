@@ -113,21 +113,29 @@ def load_config(path: Path | str | None = None) -> Config:
         raw: dict[str, Any] = json.loads(cfg_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ConfigError(f"Virheellinen JSON asetustiedostossa {cfg_path}: {exc}") from exc
-    return config_from_dict(raw)
+    return config_from_dict(raw, base_dir=cfg_path.resolve().parent)
 
 
-def config_from_dict(raw: dict[str, Any]) -> Config:
+def config_from_dict(raw: dict[str, Any], *, base_dir: Path | None = None) -> Config:
+    """Rakenna Config sanakirjasta. Suhteelliset tiedostopolut ratkaistaan ``base_dir``iin."""
     d = Config()
     ds = Selectors()
     files = raw.get("files", {})
+
+    def _path(value: object, default: Path) -> Path:
+        path = Path(str(value)) if value else default
+        if base_dir is not None and not path.is_absolute():
+            path = base_dir / path
+        return path
+
     browser = raw.get("browser", {})
     selectors = raw.get("selectors", {})
     logging_cfg = raw.get("logging", {})
     retry = raw.get("retry", {})
 
     return Config(
-        excel_file=Path(files.get("excel_file", d.excel_file)),
-        log_file=Path(files.get("log_file", d.log_file)),
+        excel_file=_path(files.get("excel_file"), d.excel_file),
+        log_file=_path(files.get("log_file"), d.log_file),
         log_level=str(logging_cfg.get("level", d.log_level)).upper(),
         browser=BrowserConfig(
             remote_debugging_port=int(browser.get("remote_debugging_port", 9222)),
@@ -153,6 +161,56 @@ def config_from_dict(raw: dict[str, Any]) -> Config:
         if isinstance(raw.get("wizard"), dict)
         else None,
     )
+
+
+def config_to_dict(config: Config, *, base_dir: Path | None = None) -> dict[str, Any]:
+    """Muuta Config tallennettavaan muotoon. Polut suhteellisiksi ``base_dir``iin, jos voi."""
+
+    def _rel(path: Path) -> str:
+        if base_dir is not None:
+            try:
+                return str(path.resolve().relative_to(base_dir.resolve()))
+            except ValueError:
+                pass
+        return str(path)
+
+    data: dict[str, Any] = {
+        "files": {"excel_file": _rel(config.excel_file), "log_file": _rel(config.log_file)},
+        "browser": {
+            "remote_debugging_port": config.browser.remote_debugging_port,
+            "user_data_dir": config.browser.user_data_dir,
+            "chrome_path": config.browser.chrome_path,
+            "page_url_contains": config.browser.page_url_contains,
+            "timeout_ms": config.browser.timeout_ms,
+        },
+        "selectors": {
+            "table_body": config.selectors.table_body,
+            "add_row_button": config.selectors.add_row_button,
+            "field_cells": dict(config.selectors.field_cells),
+            "input_in_cell": config.selectors.input_in_cell,
+        },
+        "excel_columns": dict(config.excel_columns),
+        "empty_value": config.empty_value,
+        "separator_row_between_sheets": config.separator_row_between_sheets,
+        "retry": {"max_attempts": config.max_attempts, "delay_s": config.retry_delay_s},
+        "logging": {"level": config.log_level},
+    }
+    if config.wizard is not None:
+        data["wizard"] = {
+            "main_question": config.wizard.main_question,
+            "main_sheets": list(config.wizard.main_sheets),
+            "optional_sheets": [
+                {"sheet": o.sheet, "question": o.question, "default": o.default}
+                for o in config.wizard.optional_sheets
+            ],
+        }
+    return data
+
+
+def save_config(config: Config, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = config_to_dict(config, base_dir=path.resolve().parent)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def find_chrome() -> str | None:

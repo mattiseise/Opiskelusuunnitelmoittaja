@@ -1,0 +1,146 @@
+"""GUI-savutestit offscreen-Qt:lla (pytest-qt). Ei oikeaa selainta."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("PySide6")
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QCheckBox
+
+from opiskelusuunnitelmoittaja.config import load_config
+from opiskelusuunnitelmoittaja.excel import read_sheet
+from opiskelusuunnitelmoittaja.gui.main_window import MainWindow
+from opiskelusuunnitelmoittaja.gui.settings_dialog import SettingsDialog
+from opiskelusuunnitelmoittaja.gui.worker import FillWorker
+
+REPO = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture
+def config_path(tmp_path: Path, excel_file: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Kopio repon config.jsonista, jossa Excel osoittaa testitiedostoon."""
+    raw = json.loads((REPO / "config.json").read_text(encoding="utf-8"))
+    raw["files"]["excel_file"] = str(excel_file)
+    raw["files"]["log_file"] = str(tmp_path / "logs" / "app.log")
+    raw["wizard"]["main_sheets"] = ["Ohjelmistokehittäjä", "Kyber", "Puuttuva"]
+    raw["wizard"]["optional_sheets"] = [
+        {"sheet": "Rikki", "question": "Rikki?", "default": True},
+        {"sheet": "Olematon", "question": "Olematon?", "default": True},
+    ]
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    # QSettings ei saa vuotaa oikeaan käyttäjäprofiiliin
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "qt"))
+    return path
+
+
+def test_main_window_builds_selection_from_wizard(qtbot, config_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+
+    # Vain Excelissä olevat pääsuuntaukset näkyvät; "Puuttuva" ei
+    names = [b.text() for b in win.main_group.buttons()]
+    assert names == ["Ohjelmistokehittäjä", "Kyber"]
+    assert win.main_group.buttons()[0].isChecked()
+
+    # Vain Excelissä oleva lisävalinta näkyy, oletus kyllä
+    boxes = [
+        win.optional_layout.itemAt(i).widget()  # type: ignore[union-attr]
+        for i in range(win.optional_layout.count())
+    ]
+    boxes = [b for b in boxes if isinstance(b, QCheckBox)]
+    assert [str(b.property("sheet")) for b in boxes] == ["Rikki"]
+    assert boxes[0].isChecked()
+
+    # Rikki-välilehdeltä puuttuu sarakkeita → esikatselussa vain pääsuuntaus
+    assert win.selected_sheet_names() == ["Ohjelmistokehittäjä", "Rikki"]
+    assert win.preview.rowCount() == 2
+    assert win.preview.item(0, 1).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(0, 2).text() == "45"  # type: ignore[union-attr]
+
+    boxes[0].setChecked(False)
+    win.main_group.buttons()[1].setChecked(True)
+    assert win.selected_sheet_names() == ["Kyber"]
+    assert win.preview.rowCount() == 1
+
+
+def test_manual_selection_mode(qtbot, config_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.manual_toggle.setChecked(True)
+    assert win.selected_sheet_names() == []
+    assert not win.btn_fill.isEnabled()
+    for i in range(win.manual_list.count()):
+        if win.manual_list.item(i).text() == "Kyber":
+            win.manual_list.item(i).setCheckState(Qt.CheckState.Checked)
+    assert win.selected_sheet_names() == ["Kyber"]
+    assert win.btn_fill.isEnabled()
+
+
+def test_settings_dialog_roundtrip(qtbot, config_path: Path) -> None:
+    config = load_config(config_path)
+    dialog = SettingsDialog(config, config_path)
+    qtbot.addWidget(dialog)
+    dialog.port.setValue(9333)
+    dialog.main_sheets.setPlainText("Kyber\nIT-tuki\n")
+    dialog._add_optional_row("YTO", "YTO?", True)
+    dialog.field_rows["laajuus"][1].setText("Laajuus (osp)")
+    dialog.save()
+
+    saved = load_config(config_path)
+    assert saved.browser.remote_debugging_port == 9333
+    assert saved.wizard is not None
+    assert saved.wizard.main_sheets == ["Kyber", "IT-tuki"]
+    assert [o.sheet for o in saved.wizard.optional_sheets] == ["Rikki", "Olematon", "YTO"]
+    assert saved.wizard.optional_sheets[-1].default is True
+    assert saved.excel_columns["laajuus"] == "Laajuus (osp)"
+    # Excel-polku säilyi (absoluuttinen, tmp:n ulkopuolella suhteelliseksi ei muuteta väärin)
+    assert saved.excel_file.exists()
+
+
+def test_settings_dialog_rejects_empty_selectors(qtbot, config_path: Path, monkeypatch) -> None:
+    config = load_config(config_path)
+    dialog = SettingsDialog(config, config_path)
+    qtbot.addWidget(dialog)
+    dialog.table_body.setText("")
+    warned: list[str] = []
+    monkeypatch.setattr(
+        "opiskelusuunnitelmoittaja.gui.settings_dialog.QMessageBox.warning",
+        lambda *a, **k: warned.append(a[1]),
+    )
+    dialog.save()
+    assert warned and dialog.result() == 0
+
+
+def test_fill_worker_dry_run(qtbot, config_path: Path, excel_file: Path) -> None:
+    config = load_config(config_path)
+    sheets = [read_sheet(excel_file, "Ohjelmistokehittäjä", config.excel_columns)]
+    worker = FillWorker(config, sheets, dry_run=True)
+    seen: list[tuple[int, int]] = []
+    worker.progress.connect(lambda d, t, _m: seen.append((d, t)))
+    with qtbot.waitSignal(worker.finished_ok, timeout=5000) as blocker:
+        worker.start()
+    summary = blocker.args[0]
+    assert summary.successful_rows == 2
+    assert seen == [(1, 2), (2, 2)]
+    worker.wait(2000)
+
+
+def test_fill_worker_reports_missing_chrome(qtbot, config_path: Path, excel_file: Path) -> None:
+    from dataclasses import replace
+
+    config = load_config(config_path)
+    config = replace(config, browser=replace(config.browser, remote_debugging_port=1))
+    sheets = [read_sheet(excel_file, "Kyber", config.excel_columns)]
+    worker = FillWorker(config, sheets)
+    with qtbot.waitSignal(worker.failed, timeout=5000) as blocker:
+        worker.start()
+    assert "Chrome ei vastaa" in blocker.args[0]
+    worker.wait(2000)

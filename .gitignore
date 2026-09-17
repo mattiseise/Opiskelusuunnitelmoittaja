@@ -8,3 +8,6 @@ logs/
 dist/
 .claude/settings.local.json
 .DS_Store
+build/
+dist/
+*.spec.bak

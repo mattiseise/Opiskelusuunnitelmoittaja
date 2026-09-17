@@ -62,26 +62,33 @@ class FormFiller:
 
     def __init__(
         self,
-        page: Page,
+        page: Page | None,
         config: Config,
         *,
         dry_run: bool = False,
         progress: Callable[[str], None] | None = None,
+        stop_requested: Callable[[], bool] | None = None,
     ) -> None:
-        self.page = page
+        if page is None and not dry_run:
+            raise ValueError("page vaaditaan, kun dry_run=False")
+        self.page: Page = page  # type: ignore[assignment]  # None vain kuiva-ajossa
         self.config = config
         self.dry_run = dry_run
         self._progress = progress or (lambda _msg: None)
+        self._stop_requested = stop_requested or (lambda: False)
         self.selectors = config.selectors
         self._first_row_done = False
         self._warned_multiple = False
-        self.page.set_default_timeout(config.browser.timeout_ms)
+        if page is not None:
+            page.set_default_timeout(config.browser.timeout_ms)
 
     # --- julkinen rajapinta -------------------------------------------------
 
     def process_sheets(self, sheets: list[Sheet]) -> Summary:
         results: list[SheetResult] = []
         for i, sheet in enumerate(sheets):
+            if self._stop_requested():
+                break
             results.append(self.process_sheet(sheet))
             if self.config.separator_row_between_sheets and i < len(sheets) - 1:
                 self._add_separator_row(sheet.name)
@@ -91,6 +98,12 @@ class FormFiller:
         result = SheetResult(sheet.name, len(sheet.rows))
         log.info("Aloitetaan välilehti '%s' (%d riviä)", sheet.name, len(sheet.rows))
         for n, row in enumerate(sheet.rows, start=1):
+            if self._stop_requested():
+                msg = f"{sheet.name}: keskeytetty rivillä {n}"
+                result.errors.append(msg)
+                result.failed_rows += len(sheet.rows) - n + 1
+                log.warning(msg)
+                break
             self._progress(f"  {sheet.name}: rivi {n}/{len(sheet.rows)}")
             try:
                 self.fill_new_row(row)

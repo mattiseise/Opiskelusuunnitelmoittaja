@@ -19,6 +19,7 @@ from .config import Config, ConfigError, load_config
 from .excel import ExcelError, Sheet, list_sheets, read_sheet, resolve_sheet_selection
 from .filler import FormFiller, Summary
 from .logsetup import setup_logging
+from .paths import ensure_user_files, is_frozen, user_config_path
 from .wizard import WizardCancelled, run_wizard
 
 
@@ -63,8 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    config_arg = args.config
+    if config_arg is None and is_frozen():
+        ensure_user_files()
+        config_arg = user_config_path()
     try:
-        config = load_config(args.config)
+        config = load_config(config_arg)
     except ConfigError as exc:
         print(f"Virhe: {exc}", file=sys.stderr)
         return 2

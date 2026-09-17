@@ -1,0 +1,88 @@
+name: Rakenna ja julkaise
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Testit (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Qt offscreen -riippuvuudet
+        run: sudo apt-get update -q && sudo apt-get install -y -q libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libglib2.0-0
+      - run: uv sync --extra gui
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run ruff check . && uv run ruff format --check .
+      - run: uv run pyright
+      - run: uv run pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+  build:
+    name: Paketti ${{ matrix.label }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            label: macOS (Apple Silicon)
+            script: scripts/build.sh
+            artifact: dist/*.dmg
+          - os: windows-latest
+            label: Windows x64
+            script: powershell -ExecutionPolicy Bypass -File scripts/build.ps1
+            artifact: dist/*.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Rakenna
+        run: ${{ matrix.script }}
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Julkaise
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          body: |
+            ## Asennus
+
+            **macOS (Apple Silicon):** avaa `.dmg`, vedä sovellus Ohjelmat-kansioon.
+            Paketti on allekirjoitettu ad hoc (ei Apple-notarisointia), joten ensimmäisellä
+            avauksella macOS voi estää sen. Avaa silloin Järjestelmäasetukset → Tietosuoja ja
+            suojaus → *Avaa silti*, tai aja Terminaalissa:
+            `xattr -dr com.apple.quarantine /Applications/Opiskelusuunnitelmoittaja.app`
+
+            **Windows:** pura `.zip` ja käynnistä `Opiskelusuunnitelmoittaja.exe`.
+            SmartScreen voi varoittaa tuntemattomasta julkaisijasta → *Lisätietoja* → *Suorita silti*.
+
+            Sovellus tarvitsee Google Chromen. Asetukset ja Excel kopioidaan ensimmäisellä
+            käynnistyksellä käyttäjän omaan kansioon (Tiedosto → Avaa asetuskansio).
