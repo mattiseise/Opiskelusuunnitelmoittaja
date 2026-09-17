@@ -59,8 +59,9 @@ uv run suunnitelmoittaja fill            # kysyy välilehdet
 uv run suunnitelmoittaja fill 2 --dry-run   # näytä mitä täytettäisiin, älä koske selaimeen
 ```
 
-Työkalu etsii avoimista välilehdistä sen, jolla lomaketaulukko on, lisää taulukkoon rivin
-jokaista Excel-riviä kohti ja täyttää solut. Välilehtien väliin lisätään tyhjä välirivi
+Työkalu etsii avoimista välilehdistä sen, jolla lomaketaulukko on. Jos taulukossa on valmiina
+tyhjä rivi (Wilmassa on), ensimmäinen Excel-rivi täytetään siihen; loput rivit lisätään
+lisäysnapilla. Sivun muihin taulukoihin (esim. Pvm & päivittäjä) ei kosketa. Välilehtien väliin lisätään tyhjä välirivi
 (`--no-separator` poistaa sen). Lopuksi tulostuu yhteenveto; virheet kirjataan lokiin
 `logs/app.log`. Lisää `-v` nähdäksesi etenemislokin konsolissa, `--debug` yksityiskohdat.
 
@@ -97,7 +98,7 @@ Kaikki avaimet ovat valinnaisia; puuttuvat täydennetään oletuksilla.
     "timeout_ms": 10000
   },
   "selectors": {
-    "table_body": "main form table tbody",   // CSS-valitsin (ei XPath)
+    "table_body": "table:has(th:has-text(\"Osaamistavoite\")) tbody",  // vain opintotaulukko
     "add_row_button": "[id$='__add']",
     "field_cells": {
       "osaamistavoite": "td:nth-child(1)",
@@ -116,8 +117,10 @@ Kaikki avaimet ovat valinnaisia; puuttuvat täydennetään oletuksilla.
 ```
 
 Jos lomakkeen rakenne muuttuu, päivitä `selectors`-osio. Playwright hyväksyy CSS-valitsimet
-ja `xpath=`-etuliitteiset XPath-lausekkeet kaikissa kohdissa paitsi `table_body`, jonka
-pitää olla CSS.
+ja `xpath=`-etuliitteiset XPath-lausekkeet. `table_body` kannattaa rajata yhteen taulukkoon
+(oletus tunnistaa sen Osaamistavoite-otsikosta); jos valitsin osuu useaan, käytetään
+ensimmäistä ja lokiin tulee varoitus. Lisäysnappi haetaan ensin taulukon läheltä, sitten
+koko sivulta.
 
 ## Vianetsintä
 

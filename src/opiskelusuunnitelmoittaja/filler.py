@@ -73,6 +73,8 @@ class FormFiller:
         self.dry_run = dry_run
         self._progress = progress or (lambda _msg: None)
         self.selectors = config.selectors
+        self._first_row_done = False
+        self._warned_multiple = False
         self.page.set_default_timeout(config.browser.timeout_ms)
 
     # --- julkinen rajapinta -------------------------------------------------
@@ -107,11 +109,15 @@ class FormFiller:
         return result
 
     def fill_new_row(self, row: PlanRow) -> None:
-        """Lisää uusi rivi ja täytä se. Nostaa poikkeuksen, jos jokin kenttä ei täyty."""
+        """Täytä seuraava rivi. Nostaa poikkeuksen, jos jokin kenttä ei täyty.
+
+        Ensimmäisellä kerralla käytetään taulukossa valmiina olevaa tyhjää riviä, jos
+        sellainen on; muuten painetaan lisäysnappia.
+        """
         if self.dry_run:
             log.info("[kuiva-ajo] uusi rivi: %s", row.values)
             return
-        table_row = self.add_table_row()
+        table_row = self._reuse_trailing_empty_row() or self.add_table_row()
         failures: list[str] = []
         for field_name in self.config.field_names:
             value = row.values.get(field_name, "")
@@ -124,23 +130,69 @@ class FormFiller:
 
     def add_table_row(self) -> Locator:
         """Paina lisäysnappia ja palauta lisätty (viimeinen) rivi."""
+        tbody = self._tbody()
         rows = self._rows()
         before = rows.count()
-        button = self.page.locator(self.selectors.add_row_button).first
+        button = self._add_button()
         self._retry(
             lambda: (button.scroll_into_view_if_needed(), button.click()),
             what="rivin lisäys",
         )
         self.page.wait_for_function(
-            "([sel, n]) => document.querySelectorAll(sel + ' > tr').length > n",
-            arg=[_css_or_raise(self.selectors.table_body), before],
+            "([el, n]) => el.querySelectorAll(':scope > tr').length > n",
+            arg=[tbody.element_handle(), before],
         )
         return rows.nth(rows.count() - 1)
 
     # --- sisäiset apurit ----------------------------------------------------
 
+    def _tbody(self) -> Locator:
+        """Kohdetaulukon tbody. Jos valitsin osuu useaan taulukkoon, käytetään ensimmäistä."""
+        tbody = self.page.locator(self.selectors.table_body)
+        n = tbody.count()
+        if n == 0:
+            raise RuntimeError(f"taulukkoa ei löydy valitsimella {self.selectors.table_body!r}")
+        if n > 1 and not self._warned_multiple:
+            self._warned_multiple = True
+            log.warning(
+                "Valitsin %r osuu %d taulukkoon; käytetään ensimmäistä. Tarkenna "
+                "selectors.table_body, jos väärä taulukko täyttyy.",
+                self.selectors.table_body,
+                n,
+            )
+        return tbody.first
+
     def _rows(self) -> Locator:
-        return self.page.locator(self.selectors.table_body).locator(":scope > tr")
+        return self._tbody().locator(":scope > tr")
+
+    def _add_button(self) -> Locator:
+        """Lisäysnappi mahdollisimman läheltä kohdetaulukkoa: taulukon sisältä,
+        sen vanhemmasta tai isovanhemmasta; viimeisenä koko sivulta."""
+        sel = self.selectors.add_row_button
+        table = self._tbody().locator("xpath=ancestor::table[1]")
+        for scope in (table, table.locator("xpath=.."), table.locator("xpath=../..")):
+            candidate = scope.locator(sel)
+            if candidate.count() > 0:
+                return candidate.first
+        return self.page.locator(sel).first
+
+    def _reuse_trailing_empty_row(self) -> Locator | None:
+        """Palauta taulukon viimeinen rivi, jos sitä ei ole vielä käytetty ja se on tyhjä."""
+        if self._first_row_done:
+            return None
+        self._first_row_done = True
+        rows = self._rows()
+        if rows.count() == 0:
+            return None
+        last = rows.nth(rows.count() - 1)
+        controls = last.locator(self.selectors.input_in_cell)
+        if controls.count() < len(self.config.field_names):
+            return None
+        values = controls.evaluate_all("els => els.map(e => (e.value || '').trim())")
+        if all(v == "" for v in values):
+            log.info("Käytetään taulukossa valmiina olevaa tyhjää riviä")
+            return last
+        return None
 
     def _fill_cell(self, table_row: Locator, field_name: str, value: str) -> None:
         cell_selector = self.selectors.field_cells.get(field_name)
@@ -194,13 +246,3 @@ class FormFiller:
         raise RuntimeError(
             f"{what} epäonnistui {self.config.max_attempts} yrityksen jälkeen: {last}"
         )
-
-
-def _css_or_raise(selector: str) -> str:
-    """Rivilaskuri käyttää querySelectorAllia, joten taulukon lokaattorin pitää olla CSS."""
-    if selector.startswith(("xpath=", "//", "text=")):
-        raise RuntimeError(
-            "selectors.table_body pitää antaa CSS-valitsimena (esim. 'form table tbody'), "
-            f"ei XPathina: {selector!r}"
-        )
-    return selector

@@ -2,43 +2,50 @@
 <html lang="fi">
 <head><meta charset="utf-8"><title>Testilomake – opiskelusuunnitelma</title></head>
 <body>
-<div><div><div><div>
 <main>
   <form>
-    <div>
-      <div>
-        <div>
-          <div>
-            <table>
-              <thead>
-                <tr><th>Osaamistavoite</th><th>Laajuus</th><th>Suoritustapa</th><th>Ajankohta</th></tr>
-              </thead>
-              <tbody id="rows"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+    <h2>Suoritettavat opinnot</h2>
+    <div class="repeater">
+      <table>
+        <thead>
+          <tr><th>Osaamistavoite / tutkinnon osa</th><th>Laajuus (osp)</th><th>Suoritustapa / osaaminen hankitaan</th><th>Suoritusajankohta</th><th></th></tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td></td></tr>
+        </tbody>
+      </table>
+      <button type="button" id="f-prepeater9700__add">+</button>
     </div>
-    <button type="button" id="f-prepeater9700__add">Lisää rivi</button>
+
+    <h2>Pvm &amp; päivittäjä</h2>
+    <div class="repeater">
+      <table>
+        <thead><tr><th>Päivitetty</th><th>Päivittäjä</th><th></th></tr></thead>
+        <tbody id="meta-rows">
+          <tr><td><input type="text" class="date"></td><td><input type="text"></td><td></td></tr>
+        </tbody>
+      </table>
+      <button type="button" id="f-prepeater9800__add">+</button>
+    </div>
   </form>
 </main>
-</div></div></div></div>
 <script>
-  // Jäljittelee lomakegeneraattoria: rivi ilmestyy pienellä viiveellä.
-  document.getElementById('f-prepeater9700__add').addEventListener('click', () => {
+  function addRow(tbodyId, cols) {
     setTimeout(() => {
       const tr = document.createElement('tr');
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < cols; i++) {
         const td = document.createElement('td');
         const input = document.createElement('input');
         input.type = 'text';
-        input.name = `rivi[${document.querySelectorAll('#rows > tr').length}][${i}]`;
         td.appendChild(input);
         tr.appendChild(td);
       }
-      document.getElementById('rows').appendChild(tr);
+      tr.appendChild(document.createElement('td'));
+      document.getElementById(tbodyId).appendChild(tr);
     }, 50);
-  });
+  }
+  document.getElementById('f-prepeater9700__add').addEventListener('click', () => addRow('rows', 4));
+  document.getElementById('f-prepeater9800__add').addEventListener('click', () => addRow('meta-rows', 2));
 </script>
 </body>
 </html>

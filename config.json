@@ -11,7 +11,7 @@
     "timeout_ms": 10000
   },
   "selectors": {
-    "table_body": "main form table tbody",
+    "table_body": "table:has(th:has-text(\"Osaamistavoite\")) tbody",
     "add_row_button": "[id$='__add']",
     "field_cells": {
       "osaamistavoite": "td:nth-child(1)",
