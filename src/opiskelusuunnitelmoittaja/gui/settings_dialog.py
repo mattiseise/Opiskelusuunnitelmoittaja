@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from ..config import BrowserConfig, Config, Selectors, save_config
 from ..wizard import OptionalSheet, WizardConfig
+from .theme import MIDDOT
 
 
 class SettingsDialog(QDialog):
@@ -40,17 +41,24 @@ class SettingsDialog(QDialog):
         self.config_path = config_path
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 22, 28, 20)
+        layout.setSpacing(14)
         tabs = QTabWidget()
         layout.addWidget(tabs, 1)
         tabs.addTab(self._build_general(), "Yleiset")
         tabs.addTab(self._build_wizard(), "Kysely")
         tabs.addTab(self._build_selectors(), "Lomake")
 
-        layout.addWidget(QLabel(f"Tallennetaan tiedostoon: {config_path}"))
+        path_label = QLabel(f"Tallennetaan tiedostoon{MIDDOT}{config_path}")
+        path_label.setProperty("role", "muted")
+        path_label.setWordWrap(True)
+        layout.addWidget(path_label)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Tallenna")
+        save_btn = buttons.button(QDialogButtonBox.StandardButton.Save)
+        save_btn.setText("Tallenna")
+        save_btn.setProperty("variant", "primary")
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Peruuta")
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)

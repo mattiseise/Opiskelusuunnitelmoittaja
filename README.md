@@ -30,7 +30,11 @@ Käyttö ikkunassa:
 4. **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin jälkeen.
 5. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
 
-Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset…*-ikkunassa.
+Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset*-ikkunassa.
+
+Ulkoasu noudattaa BC Helsingin design systemiä (`gui/theme.py`): pergamentti- ja burgunditokenit,
+Public Sans ja Source Serif 4 (OFL-lisenssi, fontit pakataan mukaan), ei varjoja, ei
+kulmapyöristyksiä, ei ikoneita; erottimina keskipiste, numerot ja hairline-viivat.
 
 Paketit on allekirjoitettu ad hoc, ei Applen notarisointia. Jos macOS estää avauksen,
 valitse Järjestelmäasetukset → Tietosuoja ja suojaus → *Avaa silti*, tai aja

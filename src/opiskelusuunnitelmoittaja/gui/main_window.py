@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QRadioButton,
-    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -41,12 +40,13 @@ from ..config import Config, ConfigError, load_config
 from ..excel import ExcelError, Sheet, list_sheets, read_sheet
 from ..filler import Summary
 from ..logsetup import setup_logging
+from . import theme
 from .settings_dialog import SettingsDialog
 from .worker import FillWorker, QtLogHandler
 
 log = logging.getLogger("suunnitelmoittaja.gui")
 
-LEVEL_COLORS = {"WARNING": "#b26a00", "ERROR": "#b00020", "CRITICAL": "#b00020"}
+LEVEL_COLORS = {"WARNING": "#9C7A3A", "ERROR": "#69013B", "CRITICAL": "#4A0029"}
 
 
 class MainWindow(QMainWindow):
@@ -99,55 +99,138 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         root = QWidget()
+        root.setObjectName("root")
         self.setCentralWidget(root)
         outer = QVBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # --- ylärivi: Excel + Chrome
-        top = QHBoxLayout()
-        top.addWidget(QLabel("Excel:"))
-        self.excel_edit = QLineEdit()
-        self.excel_edit.setReadOnly(True)
-        top.addWidget(self.excel_edit, 1)
-        btn_browse = QPushButton("Selaa…")
-        btn_browse.clicked.connect(self.choose_excel)
-        top.addWidget(btn_browse)
-        btn_reload = QPushButton("Lataa uudelleen")
-        btn_reload.clicked.connect(self.reload_excel)
-        top.addWidget(btn_reload)
-        outer.addLayout(top)
+        # --- otsikkovyö (burgundi section)
+        header = QWidget()
+        header.setProperty("role", "section")
+        header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        h = QHBoxLayout(header)
+        h.setContentsMargins(40, 22, 40, 22)
+        title_box = QVBoxLayout()
+        title_box.setSpacing(4)
+        eyebrow = _label("BUSINESS COLLEGE HELSINKI · OPISKELUSUUNNITELMAT", "eyebrow")
+        title = _label("Opiskelusuunnitelmoittaja", "title")
+        title_box.addWidget(eyebrow)
+        title_box.addWidget(title)
+        h.addLayout(title_box, 1)
+        meta = QVBoxLayout()
+        meta.setSpacing(2)
+        version = QLabel(f"Versio {__version__}")
+        version.setAlignment(Qt.AlignmentFlag.AlignRight)
+        version.setStyleSheet(f"color: {theme.TOKENS['muted_on_dark']}; font-size: 12px;")
+        btn_settings = QPushButton("Asetukset")
+        btn_settings.setProperty("variant", "link")
+        btn_settings.setStyleSheet(
+            f"color: {theme.TOKENS['on_section']}; text-decoration: underline; font-size: 13px;"
+        )
+        btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_settings.clicked.connect(self.open_settings)
+        meta.addWidget(version)
+        meta.addWidget(btn_settings, 0, Qt.AlignmentFlag.AlignRight)
+        h.addLayout(meta)
+        outer.addWidget(header)
 
+        # --- runko: vasen sarake (1 Chrome, 2 Opiskelija) | oikea sarake (3 Esikatselu, 4 Täyttö)
+        body = QHBoxLayout()
+        body.setContentsMargins(40, 28, 40, 16)
+        body.setSpacing(0)
+        outer.addLayout(body, 1)
+
+        left = QWidget()
+        left.setFixedWidth(400)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 32, 0)
+        left_layout.setSpacing(0)
+        body.addWidget(left)
+
+        vline = QFrame()
+        vline.setProperty("role", "vhairline")
+        vline.setFrameShape(QFrame.Shape.NoFrame)
+        body.addWidget(vline)
+
+        right = QWidget()
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(32, 0, 0, 0)
+        right_layout.setSpacing(0)
+        body.addWidget(right, 1)
+
+        # 1 · Chrome
+        left_layout.addLayout(self._step_header("1", "Chrome"))
+        self.chrome_label = _label("Tarkistetaan yhteyttä…", "status-off")
+        self.chrome_label.setWordWrap(True)
+        left_layout.addWidget(self.chrome_label)
         chrome_row = QHBoxLayout()
-        self.chrome_dot = QLabel("●")
-        self.chrome_dot.setStyleSheet("color: #999; font-size: 18px;")
-        chrome_row.addWidget(self.chrome_dot)
-        self.chrome_label = QLabel("Chrome: tarkistetaan…")
-        chrome_row.addWidget(self.chrome_label, 1)
+        chrome_row.setContentsMargins(0, 10, 0, 0)
         self.btn_chrome = QPushButton("Käynnistä Chrome")
         self.btn_chrome.clicked.connect(self.start_chrome)
         chrome_row.addWidget(self.btn_chrome)
-        btn_settings = QPushButton("Asetukset…")
-        btn_settings.clicked.connect(self.open_settings)
-        chrome_row.addWidget(btn_settings)
-        outer.addLayout(chrome_row)
+        chrome_row.addStretch()
+        left_layout.addLayout(chrome_row)
+        self.chrome_hint = _label("", "muted")
+        self.chrome_hint.setWordWrap(True)
+        self.chrome_hint.setContentsMargins(0, 10, 0, 0)
+        left_layout.addWidget(self.chrome_hint)
+        left_layout.addWidget(_hairline(top=22, bottom=22))
 
-        # --- keskiosa: valinnat | esikatselu
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        outer.addWidget(splitter, 1)
+        # 2 · Opiskelija
+        left_layout.addLayout(self._step_header("2", "Opiskelija"))
+        excel_caps = QHBoxLayout()
+        excel_caps.setSpacing(6)
+        excel_caps.addWidget(_label("LÄHDE", "caps"))
+        excel_caps.addStretch()
+        btn_browse = QPushButton("Vaihda")
+        btn_browse.setProperty("variant", "link")
+        btn_browse.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_browse.clicked.connect(self.choose_excel)
+        btn_reload = QPushButton("Lataa uudelleen")
+        btn_reload.setProperty("variant", "link")
+        btn_reload.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_reload.clicked.connect(self.reload_excel)
+        excel_caps.addWidget(btn_browse)
+        excel_caps.addWidget(_label("·", "muted"))
+        excel_caps.addWidget(btn_reload)
+        left_layout.addLayout(excel_caps)
+        self.excel_edit = QLineEdit()
+        self.excel_edit.setReadOnly(True)
+        self.excel_edit.setFrame(False)
+        self.excel_edit.setStyleSheet(
+            "background: transparent; border: none; "
+            f"border-bottom: 1px solid {theme.TOKENS['hairline_strong']}; "
+            f"padding: 2px 0 6px 0; color: {theme.TOKENS['ink_soft']}; font-size: 13px;"
+        )
+        left_layout.addWidget(self.excel_edit)
 
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-
-        self.group_main = QGroupBox("Pääsuuntaus")
-        self.main_layout = QVBoxLayout(self.group_main)
+        self.group_main = QGroupBox()
+        self.group_main.setFlat(True)
+        gm = QVBoxLayout(self.group_main)
+        gm.setContentsMargins(0, 18, 0, 0)
+        gm.setSpacing(2)
+        self.main_caps = _label("PÄÄSUUNTAUS", "caps")
+        gm.addWidget(self.main_caps)
+        self.main_layout = QVBoxLayout()
+        self.main_layout.setSpacing(0)
+        gm.addLayout(self.main_layout)
         self.main_group = QButtonGroup(self)
         self.main_group.setExclusive(True)
         left_layout.addWidget(self.group_main)
 
-        self.group_optional = QGroupBox("Lisäksi")
-        self.optional_layout = QVBoxLayout(self.group_optional)
+        self.group_optional = QGroupBox()
+        self.group_optional.setFlat(True)
+        go = QVBoxLayout(self.group_optional)
+        go.setContentsMargins(0, 14, 0, 0)
+        go.setSpacing(2)
+        go.addWidget(_label("LISÄKSI", "caps"))
+        self.optional_layout = QVBoxLayout()
+        self.optional_layout.setSpacing(0)
+        go.addLayout(self.optional_layout)
         left_layout.addWidget(self.group_optional)
 
+        left_layout.addWidget(_hairline(top=16, bottom=6))
         self.manual_toggle = QCheckBox("Valitse välilehdet käsin")
         self.manual_toggle.toggled.connect(self._toggle_manual)
         left_layout.addWidget(self.manual_toggle)
@@ -155,59 +238,91 @@ class MainWindow(QMainWindow):
         self.manual_list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.manual_list.itemChanged.connect(lambda _item: self.update_preview())
         self.manual_list.setVisible(False)
-        left_layout.addWidget(self.manual_list, 1)
-
+        self.manual_list.setMaximumHeight(190)
+        left_layout.addWidget(self.manual_list)
         self.separator_check = QCheckBox("Tyhjä välirivi välilehtien väliin")
         self.separator_check.toggled.connect(lambda _c: self.update_preview())
         left_layout.addWidget(self.separator_check)
         left_layout.addStretch()
-        splitter.addWidget(left)
 
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        self.preview_label = QLabel("Esikatselu")
-        right_layout.addWidget(self.preview_label)
+        # 3 · Esikatselu
+        step3 = self._step_header("3", "Esikatselu")
+        self.preview_label = _label("", "caps")
+        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        step3.addWidget(self.preview_label)
+        right_layout.addLayout(step3)
         self.preview = QTableWidget(0, 5)
         self.preview.setHorizontalHeaderLabels(
             ["Välilehti", "Osaamistavoite", "Laajuus", "Suoritustapa", "Ajankohta"]
         )
-        self.preview.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.preview.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        hh = self.preview.horizontalHeader()
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setMinimumSectionSize(72)
+        hh.setHighlightSections(False)
+        self.preview.setFont(theme.sans(13))
         self.preview.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.preview.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.preview.setShowGrid(False)
+        self.preview.setAlternatingRowColors(True)
+        self.preview.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.preview.verticalHeader().setVisible(False)
-        right_layout.addWidget(self.preview, 1)
-        splitter.addWidget(right)
-        splitter.setSizes([340, 740])
+        self.preview.verticalHeader().setDefaultSectionSize(34)
+        self.preview.setWordWrap(False)
+        right_layout.addWidget(self.preview, 3)
 
-        # --- alaosa: toiminnot, eteneminen, loki
+        right_layout.addWidget(_hairline(top=22, bottom=22))
+
+        # 4 · Täyttö
+        right_layout.addLayout(self._step_header("4", "Täyttö"))
         actions = QHBoxLayout()
+        actions.setSpacing(12)
         self.btn_fill = QPushButton("Täytä lomake")
+        self.btn_fill.setProperty("variant", "primary")
         self.btn_fill.setDefault(True)
-        self.btn_fill.setMinimumHeight(36)
+        self.btn_fill.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_fill.clicked.connect(self.start_fill)
         actions.addWidget(self.btn_fill)
         self.btn_stop = QPushButton("Keskeytä")
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self.stop_fill)
         actions.addWidget(self.btn_stop)
-        actions.addStretch()
+        actions.addSpacing(12)
+        self.progress_label = _label("", "muted")
+        actions.addWidget(self.progress_label, 1)
+        right_layout.addLayout(actions)
         self.progress = QProgressBar()
-        self.progress.setTextVisible(True)
-        self.progress.setFormat("%v / %m riviä")
-        actions.addWidget(self.progress, 1)
-        outer.addLayout(actions)
-
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        outer.addWidget(line)
+        self.progress.setTextVisible(False)
+        self.progress.setFixedHeight(6)
+        right_layout.addSpacing(14)
+        right_layout.addWidget(self.progress)
+        right_layout.addSpacing(12)
         self.log_view = QPlainTextEdit()
+        self.log_view.setProperty("role", "log")
         self.log_view.setReadOnly(True)
+        self.log_view.setFrameShape(QFrame.Shape.NoFrame)
         self.log_view.setMaximumBlockCount(2000)
-        self.log_view.setMinimumHeight(140)
-        outer.addWidget(self.log_view)
+        self.log_view.setMinimumHeight(110)
+        self.log_view.setPlaceholderText("Täytön loki näkyy tässä.")
+        right_layout.addWidget(self.log_view, 2)
 
         self.statusBar().showMessage("Valmis")
+
+    def _step_header(self, number: str, title: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        row.setContentsMargins(0, 0, 0, 12)
+        num = _label(number, "step-number")
+        num.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+        ttl = _label(title, "step-title")
+        ttl.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+        row.addWidget(num)
+        row.addWidget(ttl)
+        row.addStretch()
+        return row
 
     def _install_log_handler(self) -> None:
         self.log_handler = QtLogHandler()
@@ -229,7 +344,8 @@ class MainWindow(QMainWindow):
         last_excel = str(self.settings.value("excel_path", "", type=str) or "")
         excel = Path(last_excel) if last_excel and Path(last_excel).exists() else None
         self.excel_path: Path = excel or self.config.excel_file
-        self.excel_edit.setText(str(self.excel_path))
+        self.excel_edit.setText(_short_path(self.excel_path))
+        self.excel_edit.setToolTip(str(self.excel_path))
         self.separator_check.setChecked(self.config.separator_row_between_sheets)
         self.reload_excel()
 
@@ -257,7 +373,7 @@ class MainWindow(QMainWindow):
         wizard = self.config.wizard
         mains = [s for s in (wizard.main_sheets if wizard else []) if s in self._available_sheets]
         if wizard and mains:
-            self.group_main.setTitle(wizard.main_question)
+            self.main_caps.setText(wizard.main_question.upper().rstrip("?"))
             for name in mains:
                 rb = QRadioButton(name)
                 rb.toggled.connect(lambda _c: self.update_preview())
@@ -267,7 +383,7 @@ class MainWindow(QMainWindow):
             for opt in wizard.optional_sheets:
                 if opt.sheet not in self._available_sheets:
                     continue
-                cb = QCheckBox(f"{opt.question}  →  {opt.sheet}")
+                cb = QCheckBox(f"{opt.question.rstrip('?')}{theme.MIDDOT}{opt.sheet}")
                 cb.setProperty("sheet", opt.sheet)
                 cb.setChecked(opt.default)
                 cb.toggled.connect(lambda _c: self.update_preview())
@@ -336,7 +452,7 @@ class MainWindow(QMainWindow):
                     self.preview.setItem(r, col, QTableWidgetItem(row.values.get(field, "")))
         total = sum(len(s.rows) for s in sheets)
         self.preview_label.setText(
-            f"Esikatselu – {total} riviä" + (f" ({', '.join(names)})" if names else "")
+            f"{total} RIVIÄ" + (f"{theme.MIDDOT}{', '.join(names).upper()}" if names else "")
         )
         self.btn_fill.setEnabled(total > 0 and self.worker is None)
 
@@ -349,7 +465,8 @@ class MainWindow(QMainWindow):
         )
         if path:
             self.excel_path = Path(path)
-            self.excel_edit.setText(path)
+            self.excel_edit.setText(_short_path(self.excel_path))
+            self.excel_edit.setToolTip(path)
             self.settings.setValue("excel_path", path)
             self.reload_excel()
 
@@ -371,15 +488,22 @@ class MainWindow(QMainWindow):
         ok = is_chrome_listening(self.config.browser, timeout_s=0.5)
         port = self.config.browser.remote_debugging_port
         if ok:
-            self.chrome_dot.setStyleSheet("color: #2e7d32; font-size: 18px;")
-            self.chrome_label.setText(f"Chrome: yhteys portissa {port}")
-            self.btn_chrome.setText("Chrome käynnissä")
+            _set_role(self.chrome_label, "status-ok")
+            self.chrome_label.setText(f"Yhteys kunnossa{theme.MIDDOT}portti {port}")
+            self.btn_chrome.setText("Chrome on käynnissä")
             self.btn_chrome.setEnabled(False)
+            self.chrome_hint.setText(
+                "Avaa Wilman opiskelusuunnitelmalomake Chrome-ikkunaan ja jatka kohtaan 2."
+            )
         else:
-            self.chrome_dot.setStyleSheet("color: #c62828; font-size: 18px;")
-            self.chrome_label.setText(f"Chrome: ei yhteyttä (portti {port})")
+            _set_role(self.chrome_label, "status-off")
+            self.chrome_label.setText(f"Ei yhteyttä{theme.MIDDOT}portti {port}")
             self.btn_chrome.setText("Käynnistä Chrome")
             self.btn_chrome.setEnabled(True)
+            self.chrome_hint.setText(
+                "Chrome avataan erilliseen profiiliin, johon kirjautuminen säilyy. "
+                "Avaa lomakesivu siihen ikkunaan."
+            )
 
     def start_fill(self) -> None:
         if self.worker is not None:
@@ -410,6 +534,7 @@ class MainWindow(QMainWindow):
         self.log_view.clear()
         self.progress.setMaximum(total)
         self.progress.setValue(0)
+        self.progress_label.setText(f"0 / {total} riviä")
         self.worker = FillWorker(config, sheets)
         self.worker.progress.connect(self._on_progress)
         self.worker.finished_ok.connect(self._on_finished)
@@ -435,8 +560,9 @@ class MainWindow(QMainWindow):
     def _on_progress(self, done: int, total: int, message: str) -> None:
         self.progress.setMaximum(total)
         self.progress.setValue(done)
-        if message:
-            self.statusBar().showMessage(message)
+        self.progress_label.setText(
+            f"{done} / {total} riviä" + (f"{theme.MIDDOT}{message}" if message else "")
+        )
 
     @Slot(object)
     def _on_finished(self, summary: Summary) -> None:
@@ -511,6 +637,36 @@ class MainWindow(QMainWindow):
             self.worker.wait(5000)
         logging.getLogger("suunnitelmoittaja").removeHandler(self.log_handler)
         event.accept()
+
+
+def _short_path(path: Path) -> str:
+    """Kansio · tiedosto, jotta pitkä polku ei katkea alusta."""
+    return f"{path.parent.name}{theme.MIDDOT}{path.name}" if path.parent.name else path.name
+
+
+def _label(text: str, role: str) -> QLabel:
+    lbl = QLabel(text)
+    lbl.setProperty("role", role)
+    return lbl
+
+
+def _set_role(widget: QWidget, role: str) -> None:
+    widget.setProperty("role", role)
+    style = widget.style()
+    style.unpolish(widget)
+    style.polish(widget)
+
+
+def _hairline(*, top: int = 0, bottom: int = 0) -> QWidget:
+    """Hairline-viiva pystyvälistyksellä."""
+    holder = QWidget()
+    lay = QVBoxLayout(holder)
+    lay.setContentsMargins(0, top, 0, bottom)
+    line = QFrame()
+    line.setProperty("role", "hairline")
+    line.setFrameShape(QFrame.Shape.NoFrame)
+    lay.addWidget(line)
+    return holder
 
 
 def _escape(text: str) -> str:

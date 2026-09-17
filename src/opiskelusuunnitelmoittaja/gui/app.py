@@ -30,11 +30,13 @@ def main(argv: list[str] | None = None) -> int:
 
     from PySide6.QtWidgets import QApplication
 
+    from . import theme
     from .main_window import MainWindow
 
     app = QApplication(argv)
     app.setApplicationName("Opiskelusuunnitelmoittaja")
     app.setOrganizationName("Seise")
+    theme.apply(app)
     window = MainWindow(resolve_config_path(argv))
     window.show()
     return app.exec()
