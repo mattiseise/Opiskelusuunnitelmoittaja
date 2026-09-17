@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .wizard import WizardConfig
+
 DEFAULT_CONFIG_PATH = Path("config.json")
 DEFAULT_PROFILE_DIRNAME = ".opiskelusuunnitelmoittaja/chrome-profile"
 
@@ -90,6 +92,7 @@ class Config:
     separator_row_between_sheets: bool = True
     max_attempts: int = 3
     retry_delay_s: float = 1.0
+    wizard: WizardConfig | None = None  # None = kysytään välilehdet numeroina
 
     @property
     def field_names(self) -> list[str]:
@@ -146,6 +149,9 @@ def config_from_dict(raw: dict[str, Any]) -> Config:
         ),
         max_attempts=int(retry.get("max_attempts", d.max_attempts)),
         retry_delay_s=float(retry.get("delay_s", d.retry_delay_s)),
+        wizard=WizardConfig.from_dict(raw["wizard"])
+        if isinstance(raw.get("wizard"), dict)
+        else None,
     )
 
 

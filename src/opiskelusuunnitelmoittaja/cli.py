@@ -19,6 +19,7 @@ from .config import Config, ConfigError, load_config
 from .excel import ExcelError, Sheet, list_sheets, read_sheet, resolve_sheet_selection
 from .filler import FormFiller, Summary
 from .logsetup import setup_logging
+from .wizard import WizardCancelled, run_wizard
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,7 +50,8 @@ def build_parser() -> argparse.ArgumentParser:
     fill.add_argument(
         "sheets",
         nargs="?",
-        help="välilehdet pilkuilla erotettuna: numerot (1,3) tai nimet. Ilman → kysytään.",
+        help="välilehdet pilkuilla erotettuna: numerot (1,3) tai nimet. "
+        "Ilman → ohjattu kysely (pääsuuntaus, kaksoistutkinto, YTO...).",
     )
     fill.add_argument("--dry-run", action="store_true", help="älä koske selaimeen, näytä vain data")
     fill.add_argument("--yes", "-y", action="store_true", help="älä pyydä vahvistusta")
@@ -119,12 +121,20 @@ def cmd_sheets(config: Config) -> int:
 
 def cmd_fill(config: Config, selection: str | None, *, dry_run: bool, assume_yes: bool) -> int:
     available = list_sheets(config.excel_file)
-    if selection is None:
-        selection = _ask_selection(available)
-        if selection is None:
+    if selection is not None:
+        chosen = resolve_sheet_selection(selection, available)
+    elif config.wizard is not None:
+        try:
+            chosen = run_wizard(config.wizard, available)
+        except WizardCancelled as exc:
+            print(f"Peruttu: {exc}")
+            return 0
+    else:
+        answer = _ask_selection(available)
+        if answer is None:
             print("Ei valintaa, lopetetaan.")
             return 0
-    chosen = resolve_sheet_selection(selection, available)
+        chosen = resolve_sheet_selection(answer, available)
 
     sheets: list[Sheet] = [
         read_sheet(config.excel_file, name, config.excel_columns) for name in chosen

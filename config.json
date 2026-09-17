@@ -35,5 +35,30 @@
   },
   "logging": {
     "level": "INFO"
+  },
+  "wizard": {
+    "main_question": "Mikä on opiskelijan pääsuuntaus?",
+    "main_sheets": [
+      "Ohjelmistokehittäjä",
+      "Kyber",
+      "IT-tuki"
+    ],
+    "optional_sheets": [
+      {
+        "sheet": "Lukio",
+        "question": "Onko opiskelija kaksoistutkinnossa (lukio)?",
+        "default": false
+      },
+      {
+        "sheet": "YTO",
+        "question": "Lisätäänkö YTO-opinnot?",
+        "default": true
+      },
+      {
+        "sheet": "Väylä",
+        "question": "Lisätäänkö väyläopinnot?",
+        "default": false
+      }
+    ]
   }
 }

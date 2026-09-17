@@ -55,7 +55,7 @@ open -na "Google Chrome" --args --remote-debugging-port=9222 --user-data-dir="$H
 ```bash
 uv run suunnitelmoittaja sheets          # listaa Excelin välilehdet
 uv run suunnitelmoittaja fill 1,3        # täytä välilehdet 1 ja 3 (numerot tai nimet)
-uv run suunnitelmoittaja fill            # kysyy välilehdet
+uv run suunnitelmoittaja fill            # ohjattu kysely (pääsuuntaus, lukio, YTO, väylä)
 uv run suunnitelmoittaja fill 2 --dry-run   # näytä mitä täytettäisiin, älä koske selaimeen
 ```
 
@@ -64,6 +64,28 @@ tyhjä rivi (Wilmassa on), ensimmäinen Excel-rivi täytetään siihen; loput ri
 lisäysnapilla. Sivun muihin taulukoihin (esim. Pvm & päivittäjä) ei kosketa. Välilehtien väliin lisätään tyhjä välirivi
 (`--no-separator` poistaa sen). Lopuksi tulostuu yhteenveto; virheet kirjataan lokiin
 `logs/app.log`. Lisää `-v` nähdäksesi etenemislokin konsolissa, `--debug` yksityiskohdat.
+
+### Ohjattu kysely
+
+`fill` ilman välilehtiä kysyy, mitä opiskelijalle laitetaan: ensin pääsuuntaus
+(Ohjelmistokehittäjä / Kyber / IT-tuki), sitten kyllä/ei-kysymyksinä kaksoistutkinto (Lukio),
+YTO-opinnot (oletus kyllä) ja väyläopinnot. Tyhjä vastaus valitsee hakasulkeissa isolla
+merkityn oletuksen. Kysymykset ja välilehdet määritellään `config.json`-tiedoston
+`wizard`-osiossa:
+
+```jsonc
+"wizard": {
+  "main_question": "Mikä on opiskelijan pääsuuntaus?",
+  "main_sheets": ["Ohjelmistokehittäjä", "Kyber", "IT-tuki"],
+  "optional_sheets": [
+    { "sheet": "Lukio", "question": "Onko opiskelija kaksoistutkinnossa (lukio)?", "default": false },
+    { "sheet": "YTO",   "question": "Lisätäänkö YTO-opinnot?",                     "default": true },
+    { "sheet": "Väylä", "question": "Lisätäänkö väyläopinnot?",                    "default": false }
+  ]
+}
+```
+
+Jos `wizard`-osiota ei ole, `fill` kysyy välilehdet numeroina kuten aiemmin.
 
 ## Excel-tiedoston rakenne
 
@@ -143,7 +165,7 @@ Tarkista napin `id` selaimen kehittäjätyökaluilla.
 ```bash
 uv sync                                  # asentaa myös dev-riippuvuudet
 uv run playwright install chromium       # testien selain (kerran)
-uv run pytest                            # 34 testiä, mukana oikea selaintesti
+uv run pytest                            # 45 testiä, mukana oikea selaintesti
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
 ```
@@ -157,6 +179,7 @@ Rakenne:
 ```
 src/opiskelusuunnitelmoittaja/
   cli.py        komennot chrome / sheets / fill
+  wizard.py     ohjattu kysely (pääsuuntaus, lukio, YTO, väylä)
   config.py     asetusten lataus ja oletukset, Chromen tunnistus
   excel.py      Excelin luku (openpyxl), arvojen muotoilu
   browser.py    Chromen käynnistys ja CDP-yhteys
