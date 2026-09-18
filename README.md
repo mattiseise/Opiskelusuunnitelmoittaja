@@ -12,97 +12,135 @@ pandas openpyxl:llä, ja projekti käyttää `pyproject.toml`-määrittelyä ja 
 Toimii macOS:llä, Windowsilla ja Linuxilla. Versiossa 2.1 on graafinen käyttöliittymä ja
 valmiit sovelluspaketit.
 
-## Valmis sovellus (suositus)
+## Pikaohjeet alustoittain
 
-Lataa uusin paketti [Releases-sivulta](https://github.com/mattiseise/Opiskelusuunnitelmoittaja/releases):
-macOS:lle `.dmg` (Apple Silicon), Windowsille `.zip`. Sovellus tarvitsee koneelta vain
-Google Chromen; Python tai uv ei ole tarpeen.
+Sovellus tarvitsee koneelta Google Chromen. Kaikki muu (Python, Playwright-ajuri, fontit)
+tulee paketin mukana. Pakettien latauspaikka: [Releases](https://github.com/mattiseise/Opiskelusuunnitelmoittaja/releases).
 
-Ensimmäisellä käynnistyksellä sovellus kopioi `config.json`-asetukset ja `Opintosuunnitelmat.xlsx`-
-pohjan käyttäjän omaan kansioon (macOS: `~/Library/Application Support/Opiskelusuunnitelmoittaja`,
-Windows: `%APPDATA%\Opiskelusuunnitelmoittaja`). Tiedosto → *Avaa asetuskansio* vie sinne.
+### macOS
 
-Käyttö ikkunassa:
+**Valmis sovellus**
 
-1. **Käynnistä Chrome** -nappi avaa Chromen erilliseen profiiliin. Pallo muuttuu vihreäksi,
-   kun yhteys on kunnossa.
+1. Lataa `OpintosuunnitelmanTayttaja-<versio>-macos-arm64.dmg`, avaa se ja vedä
+   *Opintosuunnitelman täyttäjä* Ohjelmat-kansioon.
+2. Ensimmäisellä avauksella macOS voi estää ad hoc -allekirjoitetun paketin. Salli se joko
+   Järjestelmäasetukset → Tietosuoja ja suojaus → *Avaa silti*, tai Terminaalissa:
+
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/Opintosuunnitelman täyttäjä.app"
+   ```
+
+3. Käynnistä sovellus Launchpadista tai Spotlightista ("Opintosuunnitelman täyttäjä").
+
+Asetukset ja Excel-pohja kopioidaan ensimmäisellä käynnistyksellä kansioon
+`~/Library/Application Support/OpintosuunnitelmanTayttaja/` (Tiedosto → *Avaa asetuskansio*).
+
+**Kehitysversio lähdekoodista** (Homebrew ja uv):
+
+```bash
+brew install uv
+git clone https://github.com/mattiseise/Opiskelusuunnitelmoittaja
+cd Opiskelusuunnitelmoittaja
+uv sync --extra gui
+uv run suunnitelmoittaja-gui           # käyttöliittymä
+scripts/make-launcher.sh --dock        # Dock-käynnistin "Opintosuunnitelman täyttäjä (dev)"
+```
+
+**Oma paketti** (.app + .dmg kansioon `dist/`):
+
+```bash
+scripts/build.sh
+```
+
+**Komentorivi** (samasta kansiosta):
+
+```bash
+uv run suunnitelmoittaja chrome        # käynnistä Chrome, avaa lomake siihen ikkunaan
+uv run suunnitelmoittaja fill          # ohjattu kysely: pääsuuntaus, lukio, YTO, väylä
+uv run suunnitelmoittaja fill 1,3      # tai välilehdet suoraan
+uv run suunnitelmoittaja fill 2 --dry-run
+```
+
+Paketoidusta sovelluksesta komentorivi on
+`"/Applications/Opintosuunnitelman täyttäjä.app/Contents/MacOS/OpintosuunnitelmanTayttaja" --cli fill 1`.
+
+### Windows
+
+**Valmis sovellus**
+
+1. Lataa `OpintosuunnitelmanTayttaja-<versio>-windows-x64.zip` ja pura se esimerkiksi kansioon
+   `C:\Ohjelmat\OpintosuunnitelmanTayttaja\`.
+2. Käynnistä `OpintosuunnitelmanTayttaja.exe`. SmartScreen varoittaa tuntemattomasta julkaisijasta:
+   *Lisätietoja* → *Suorita silti*.
+3. Pikakuvake työpöydälle tai tehtäväpalkkiin: hiiren oikea → *Lähetä kohteeseen* → *Työpöytä*,
+   tai vedä käynnissä olevan sovelluksen kuvake tehtäväpalkkiin ja valitse *Kiinnitä*.
+
+Asetukset ja Excel-pohja kopioidaan ensimmäisellä käynnistyksellä kansioon
+`%APPDATA%\OpintosuunnitelmanTayttaja\` (Tiedosto → *Avaa asetuskansio*).
+
+**Kehitysversio lähdekoodista** (PowerShell; uv asennetaan wingetillä):
+
+```powershell
+winget install --id astral-sh.uv -e
+git clone https://github.com/mattiseise/Opiskelusuunnitelmoittaja
+cd Opiskelusuunnitelmoittaja
+uv sync --extra gui
+uv run suunnitelmoittaja-gui
+```
+
+**Oma paketti** (.zip kansioon `dist\`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1
+```
+
+**Komentorivi**:
+
+```powershell
+uv run suunnitelmoittaja chrome
+uv run suunnitelmoittaja fill
+uv run suunnitelmoittaja fill 1,3
+```
+
+Paketoidusta sovelluksesta: `OpintosuunnitelmanTayttaja.exe --cli fill 1`.
+
+### Julkaisu (molemmat paketit kerralla)
+
+Versiotagi käynnistää GitHub Actions -putken, joka ajaa testit, rakentaa macOS- ja
+Windows-paketit ja liittää ne Releaseen asennusohjeineen:
+
+```bash
+git tag v2.1.0
+git push origin v2.1.0
+```
+
+## Käyttö ikkunassa
+
+1. **Käynnistä Chrome** avaa Chromen erilliseen profiiliin, johon kirjautuminen säilyy.
+   Tila näkyy tekstinä: burgundi "Yhteys kunnossa · portti 9222", kun yhteys on.
 2. Avaa Wilman opiskelusuunnitelmalomake siihen Chrome-ikkunaan.
-3. Valitse pääsuuntaus ja rastita lisävalinnat (lukio, YTO, väylä) tai valitse välilehdet käsin.
+3. Valitse pääsuuntaus ja rastita lisävalinnat (lukio, YTO, väylä), tai valitse välilehdet käsin.
    Esikatselu näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
-4. Rastita esikatselusta rivit, jotka viedään (oletuksena kaikki; *Valitse kaikki / Poista
-   valinnat* vaihtaa kerralla), ja paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa;
+4. Rastita esikatselusta vietävät rivit (oletuksena kaikki; otsikkorivin rasti valitsee tai
+   poistaa kaikki kerralla) ja paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa;
    *Keskeytä* pysäyttää rivin jälkeen.
 5. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
 
 Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset*-ikkunassa.
 
-Kuvakevaihtoehdot ovat kansiossa `packaging/icon-variants/`. Ulkoasu noudattaa BC Helsingin design systemiä (`gui/theme.py`): pergamentti- ja burgunditokenit,
+Ulkoasu noudattaa BC Helsingin design systemiä (`gui/theme.py`): pergamentti- ja burgunditokenit,
 Public Sans ja Source Serif 4 (OFL-lisenssi, fontit pakataan mukaan), ei varjoja, ei
 kulmapyöristyksiä, ei ikoneita; erottimina keskipiste, numerot ja hairline-viivat.
+Kuvakevaihtoehdot ovat kansiossa `packaging/icon-variants/`.
 
-Paketit on allekirjoitettu ad hoc, ei Applen notarisointia. Jos macOS estää avauksen,
-valitse Järjestelmäasetukset → Tietosuoja ja suojaus → *Avaa silti*, tai aja
-`xattr -dr com.apple.quarantine "/Applications/Opintosuunnitelman täyttäjä.app"`. Windowsin
-SmartScreen: *Lisätietoja* → *Suorita silti*.
+## Komentorivi tarkemmin
 
-## Komentorivi ja kehitys
-
-### Vaatimukset
-
-- Python 3.12 tai uudempi
-- [uv](https://docs.astral.sh/uv/) (`brew install uv` tai `pipx install uv`)
-- Google Chrome
-
-### Asennus
-
-```bash
-git clone https://github.com/mattiseise/Opiskelusuunnitelmoittaja
-cd Opiskelusuunnitelmoittaja
-uv sync
-```
-
-`uv sync` luo virtuaaliympäristön `.venv/` ja asentaa riippuvuudet. Komennot ajetaan
-`uv run suunnitelmoittaja ...` -muodossa (tai aktivoi `.venv` ja jätä `uv run` pois).
-GUI kehitysympäristöstä: `uv sync --extra gui && uv run suunnitelmoittaja-gui`.
-
-### Käyttö komentoriviltä
-
-Kolme askelta:
-
-**1. Käynnistä Chrome etädebuggauksella.**
-
-```bash
-uv run suunnitelmoittaja chrome
-```
-
-Komento käynnistää Chromen erilliseen profiiliin (`~/.opiskelusuunnitelmoittaja/chrome-profile`)
-portti 9222 auki. Erillinen profiili on pakollinen, koska Chrome 136 ja uudemmat eivät salli
-etädebuggausta oletusprofiilissa. Kirjautumiset säilyvät profiilissa kertojen välillä, joten
-kirjautuminen tarvitsee tehdä vain kerran.
-
-Jos haluat käynnistää Chromen käsin, `uv run suunnitelmoittaja chrome --print` tulostaa
-komennon omalle käyttöjärjestelmällesi. macOS:llä se on:
-
-```bash
-open -na "Google Chrome" --args --remote-debugging-port=9222 --user-data-dir="$HOME/.opiskelusuunnitelmoittaja/chrome-profile"
-```
-
-**2. Avaa lomakesivu** siihen Chrome-ikkunaan ja kirjaudu tarvittaessa.
-
-**3. Täytä lomake.**
-
-```bash
-uv run suunnitelmoittaja sheets          # listaa Excelin välilehdet
-uv run suunnitelmoittaja fill 1,3        # täytä välilehdet 1 ja 3 (numerot tai nimet)
-uv run suunnitelmoittaja fill            # ohjattu kysely (pääsuuntaus, lukio, YTO, väylä)
-uv run suunnitelmoittaja fill 2 --dry-run   # näytä mitä täytettäisiin, älä koske selaimeen
-```
-
-Työkalu etsii avoimista välilehdistä sen, jolla lomaketaulukko on. Jos taulukossa on valmiina
-tyhjä rivi (Wilmassa on), ensimmäinen Excel-rivi täytetään siihen; loput rivit lisätään
-lisäysnapilla. Sivun muihin taulukoihin (esim. Pvm & päivittäjä) ei kosketa. Välilehtien väliin lisätään tyhjä välirivi
-(`--no-separator` poistaa sen). Lopuksi tulostuu yhteenveto; virheet kirjataan lokiin
-`logs/app.log`. Lisää `-v` nähdäksesi etenemislokin konsolissa, `--debug` yksityiskohdat.
+Työkalu etsii avoimista Chromen välilehdistä sen, jolla lomaketaulukko on. Jos taulukossa on
+valmiina tyhjä rivi (Wilmassa on), ensimmäinen Excel-rivi täytetään siihen; loput rivit lisätään
+lisäysnapilla. Sivun muihin taulukoihin (esim. Pvm & päivittäjä) ei kosketa. Välilehtien väliin
+lisätään tyhjä välirivi (`--no-separator` poistaa sen). Lopuksi tulostuu yhteenveto; virheet
+kirjataan lokiin `logs/app.log`. `-v` näyttää etenemislokin konsolissa, `--debug` yksityiskohdat,
+`uv run suunnitelmoittaja sheets` listaa Excelin välilehdet numeroituina.
 
 ### Ohjattu kysely
 
@@ -208,19 +246,6 @@ uv run pytest                            # 51 testiä: selaintestit + GUI offscr
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
 ```
-
-### Käynnistin Dockiin ilman pakettia (macOS)
-
-Kehitysversion saa napista käyntiin ilman PyInstalleria:
-
-```bash
-scripts/make-launcher.sh --dock
-```
-
-Tekee `~/Applications/Opintosuunnitelman täyttäjä (dev).app`-käynnistimen, joka ajaa
-`uv run suunnitelmoittaja-gui` repokansiosta (koodimuutokset näkyvät heti), ja lisää sen
-Dockiin. Ikoni tehdään `packaging/icon.png`:stä. Loki: `~/Library/Logs/OpintosuunnitelmanTayttaja-dev.log`.
-Jaettava, uv:sta riippumaton sovellus rakennetaan alla olevalla tavalla.
 
 ### Sovelluspaketin rakentaminen
 

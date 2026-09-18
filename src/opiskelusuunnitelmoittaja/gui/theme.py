@@ -159,6 +159,12 @@ def build_qss() -> str:
         border-radius: 0;
     }}
     QRadioButton::indicator {{ border-radius: 8px; }}
+    QCheckBox::indicator:indeterminate {{
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 {t["bg"]}, stop:0.34 {t["bg"]}, stop:0.35 {t["brand"]}, stop:0.65 {t["brand"]},
+            stop:0.66 {t["bg"]}, stop:1 {t["bg"]});
+        border-color: {t["brand"]};
+    }}
     QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
         background: {t["brand"]}; border-color: {t["brand"]};
     }}

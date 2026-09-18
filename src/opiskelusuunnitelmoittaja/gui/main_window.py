@@ -248,12 +248,6 @@ class MainWindow(QMainWindow):
 
         # 3 · Esikatselu
         step3 = self._step_header("3", "Esikatselu")
-        self.btn_toggle_all = QPushButton("Poista valinnat")
-        self.btn_toggle_all.setProperty("variant", "link")
-        self.btn_toggle_all.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_toggle_all.clicked.connect(self.toggle_all_rows)
-        step3.addWidget(self.btn_toggle_all)
-        step3.addWidget(_label("·", "muted"))
         self.preview_label = _label("", "caps")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         step3.addWidget(self.preview_label)
@@ -272,6 +266,16 @@ class MainWindow(QMainWindow):
         hh.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         hh.setMinimumSectionSize(36)
         self.preview.itemChanged.connect(self._on_preview_item_changed)
+        # "Valitse kaikki / poista valinnat" -rasti otsikkorivin tyhjässä solussa
+        self.header_check = QCheckBox(hh)
+        self.header_check.setTristate(True)
+        self.header_check.setToolTip("Valitse kaikki / poista valinnat")
+        self.header_check.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header_check.setStyleSheet("QCheckBox { padding: 0; margin: 0; spacing: 0; }")
+        self.header_check.clicked.connect(self.toggle_all_rows)
+        hh.sectionResized.connect(lambda *_a: self._place_header_check())
+        hh.geometriesChanged.connect(self._place_header_check)
+        self._place_header_check()
         hh.setHighlightSections(False)
         self.preview.setFont(theme.sans(13))
         self.preview.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -490,7 +494,8 @@ class MainWindow(QMainWindow):
                 result.append(Sheet(sheet.name, rows))
         return result
 
-    def toggle_all_rows(self) -> None:
+    def toggle_all_rows(self, *_args: object) -> None:
+        """Otsikkorivin rasti: kaikki valittuna → poista valinnat, muuten → valitse kaikki."""
         all_checked = len(self.checked_row_indices()) == self.preview.rowCount()
         state = Qt.CheckState.Unchecked if all_checked else Qt.CheckState.Checked
         self.preview.blockSignals(True)
@@ -512,11 +517,27 @@ class MainWindow(QMainWindow):
         self.preview_label.setText(
             count + (f"{theme.MIDDOT}{', '.join(names).upper()}" if names else "")
         )
-        self.btn_toggle_all.setText(
-            "Poista valinnat" if checked == total and total > 0 else "Valitse kaikki"
-        )
-        self.btn_toggle_all.setEnabled(total > 0)
+        self.header_check.blockSignals(True)
+        if total == 0 or checked == 0:
+            self.header_check.setCheckState(Qt.CheckState.Unchecked)
+        elif checked == total:
+            self.header_check.setCheckState(Qt.CheckState.Checked)
+        else:
+            self.header_check.setCheckState(Qt.CheckState.PartiallyChecked)
+        self.header_check.blockSignals(False)
+        self.header_check.setEnabled(total > 0)
         self.btn_fill.setEnabled(checked > 0 and self.worker is None)
+
+    def _place_header_check(self) -> None:
+        hh = self.preview.horizontalHeader()
+        w = hh.sectionSize(0)
+        h = hh.height()
+        size = self.header_check.sizeHint()
+        self.header_check.move(
+            hh.sectionViewportPosition(0) + max(0, (w - size.width()) // 2),
+            max(0, (h - size.height()) // 2),
+        )
+        self.header_check.raise_()
 
     # ------------------------------------------------------------------ toiminnot
 

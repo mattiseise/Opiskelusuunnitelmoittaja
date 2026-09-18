@@ -89,12 +89,12 @@ def test_preview_row_checkboxes_and_toggle(qtbot, config_path: Path) -> None:
     qtbot.addWidget(win)
     assert win.preview.rowCount() == 2
     assert win.checked_row_indices() == [0, 1]
-    assert win.btn_toggle_all.text() == "Poista valinnat"
+    assert win.header_check.checkState() == Qt.CheckState.Checked
 
     win.preview.item(1, 0).setCheckState(Qt.CheckState.Unchecked)  # type: ignore[union-attr]
     assert win.checked_row_indices() == [0]
     assert win.preview_label.text().startswith("1 / 2 RIVIÄ")
-    assert win.btn_toggle_all.text() == "Valitse kaikki"
+    assert win.header_check.checkState() == Qt.CheckState.PartiallyChecked
     sheets = win.selected_sheets_for_fill()
     assert [s.name for s in sheets] == ["Ohjelmistokehittäjä"]
     assert [r.values["osaamistavoite"] for r in sheets[0].rows] == ["Ohjelmointi"]
@@ -103,6 +103,7 @@ def test_preview_row_checkboxes_and_toggle(qtbot, config_path: Path) -> None:
     assert win.checked_row_indices() == [0, 1]
     win.toggle_all_rows()  # kaikki valittuna → poista valinnat
     assert win.checked_row_indices() == []
+    assert win.header_check.checkState() == Qt.CheckState.Unchecked
     assert not win.btn_fill.isEnabled()
     assert win.selected_sheets_for_fill() == []
 
