@@ -91,5 +91,11 @@ def test_wizard_parsed_from_config() -> None:
     assert cfg.wizard.optional_sheets == [OptionalSheet("C", "C?", default=True)]
 
 
+def test_missing_main_question_uses_default() -> None:
+    cfg = config_from_dict({"wizard": {"main_sheets": ["A"]}})
+    assert cfg.wizard is not None
+    assert cfg.wizard.main_question == "Mikä on opiskelijan pääsuuntaus?"
+
+
 def test_no_wizard_in_config() -> None:
     assert config_from_dict({}).wizard is None

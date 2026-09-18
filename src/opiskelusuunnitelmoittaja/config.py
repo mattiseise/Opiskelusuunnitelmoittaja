@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .contact import TeacherContact
 from .wizard import WizardConfig
 
 DEFAULT_CONFIG_PATH = Path("config.json")
@@ -93,6 +94,7 @@ class Config:
     max_attempts: int = 3
     retry_delay_s: float = 1.0
     wizard: WizardConfig | None = None  # None = kysytään välilehdet numeroina
+    teacher: TeacherContact = field(default_factory=TeacherContact)
 
     @property
     def field_names(self) -> list[str]:
@@ -160,6 +162,9 @@ def config_from_dict(raw: dict[str, Any], *, base_dir: Path | None = None) -> Co
         wizard=WizardConfig.from_dict(raw["wizard"])
         if isinstance(raw.get("wizard"), dict)
         else None,
+        teacher=TeacherContact.from_dict(raw["teacher"])
+        if isinstance(raw.get("teacher"), dict)
+        else TeacherContact(),
     )
 
 
@@ -195,6 +200,7 @@ def config_to_dict(config: Config, *, base_dir: Path | None = None) -> dict[str,
         "retry": {"max_attempts": config.max_attempts, "delay_s": config.retry_delay_s},
         "logging": {"level": config.log_level},
     }
+    data["teacher"] = config.teacher.to_dict()
     if config.wizard is not None:
         data["wizard"] = {
             "main_question": config.wizard.main_question,

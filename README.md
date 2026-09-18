@@ -128,6 +128,18 @@ git push origin v2.1.0
 
 Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset*-ikkunassa.
 
+**Opettajan yhteystiedot alimmaksi riviksi.** Asetukset → *Opettaja*: nimi, sähköposti ja
+puhelin. Sen jälkeen vaiheessa 2 on rasti "Lisätäänkö opettajan yhteystiedot alimmaksi riviksi",
+ja esikatselun viimeiseksi tulee rivi *Yhteystiedot*, jonka teksti on oletuksena
+
+> Opiskelijalla on henkilökohtainen opintosuunnitelma ja hän etenee siinä omaan tahtiinsa.
+> Mikäli opintosuunnitelmasta on kysyttävää: \<Nimi\>, sähköposti: \<sähköpostiosoite\> tai
+> puhelimitse: \<puhelinnumero\>
+
+Tekstin, kohdekentän ja oletusvastauksen voi muuttaa samassa välilehdessä (`config.json` →
+`teacher`). Komentorivillä kysely kysyy saman; suoravalinnassa `--yhteystiedot` /
+`--ei-yhteystietoja` ohittaa oletuksen.
+
 Ulkoasu noudattaa BC Helsingin design systemiä (`gui/theme.py`): pergamentti- ja burgunditokenit,
 Public Sans ja Source Serif 4 (OFL-lisenssi, fontit pakataan mukaan), ei varjoja, ei
 kulmapyöristyksiä, ei ikoneita; erottimina keskipiste, numerot ja hairline-viivat.

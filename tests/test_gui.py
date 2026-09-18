@@ -34,6 +34,7 @@ def config_path(tmp_path: Path, excel_file: Path, monkeypatch: pytest.MonkeyPatc
         {"sheet": "Rikki", "question": "Rikki?", "default": True},
         {"sheet": "Olematon", "question": "Olematon?", "default": True},
     ]
+    raw["teacher"] = {"name": "", "email": "", "phone": ""}  # ei yhteystietoja oletuksena
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
     # QSettings ei saa vuotaa oikeaan käyttäjäprofiiliin
@@ -106,6 +107,33 @@ def test_preview_row_checkboxes_and_toggle(qtbot, config_path: Path) -> None:
     assert win.header_check.checkState() == Qt.CheckState.Unchecked
     assert not win.btn_fill.isEnabled()
     assert win.selected_sheets_for_fill() == []
+
+
+def test_contact_row_in_preview_and_settings(qtbot, config_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert not win.contact_check.isEnabled()  # ei yhteystietoja asetuksissa
+
+    dialog = SettingsDialog(win.config, config_path)
+    qtbot.addWidget(dialog)
+    dialog.teacher_name.setText("Matti Seise")
+    dialog.teacher_email.setText("matti.seise@bc.fi")
+    dialog.teacher_phone.setText("041 534 5404")
+    dialog.save()
+    win.reload_config()
+
+    assert win.contact_check.isEnabled() and win.contact_check.isChecked()
+    assert win.preview.rowCount() == 3
+    last = win.preview.item(2, 2).text()  # type: ignore[union-attr]
+    assert last.startswith("Opiskelijalla on henkilökohtainen opintosuunnitelma")
+    assert "Matti Seise, sähköposti: matti.seise@bc.fi tai puhelimitse: 041 534 5404" in last
+    assert win.preview.item(2, 1).text() == "Yhteystiedot"  # type: ignore[union-attr]
+    assert win.preview.item(2, 3).text() == ""  # type: ignore[union-attr]
+    sheets = win.selected_sheets_for_fill()
+    assert [s.name for s in sheets][-1] == "Yhteystiedot"
+
+    win.contact_check.setChecked(False)
+    assert win.preview.rowCount() == 2
 
 
 def test_settings_dialog_roundtrip(qtbot, config_path: Path) -> None:

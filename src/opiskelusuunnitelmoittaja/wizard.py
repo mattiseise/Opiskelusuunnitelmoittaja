@@ -48,7 +48,7 @@ class WizardConfig:
             )
         main_sheets = [str(s) for s in (raw.get("main_sheets", []) or [])]
         return cls(
-            main_question=str(raw.get("main_question") or cls.main_question),
+            main_question=str(raw.get("main_question") or cls().main_question),
             main_sheets=main_sheets,
             optional_sheets=optional,
         )
@@ -107,6 +107,17 @@ def run_wizard(
     say("")
     say("Täytetään välilehdet: " + ", ".join(chosen))
     return chosen
+
+
+def ask_yes_no(
+    question: str,
+    *,
+    default: bool,
+    ask: Prompter = input,
+    say: Callable[[str], None] = print,
+) -> bool:
+    """Kyllä/ei-kysymys konsolissa; tyhjä vastaus palauttaa oletuksen."""
+    return _ask_yes_no(ask, say, question, default=default)
 
 
 def _ask_yes_no(ask: Prompter, say: Callable[[str], None], question: str, *, default: bool) -> bool:

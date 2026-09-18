@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 from .. import APP_TITLE, __version__
 from ..browser import BrowserError, is_chrome_listening, launch_chrome
 from ..config import Config, ConfigError, load_config
+from ..contact import QUESTION as CONTACT_QUESTION
 from ..excel import ExcelError, PlanRow, Sheet, list_sheets, read_sheet
 from ..filler import Summary
 from ..logsetup import setup_logging
@@ -244,6 +245,12 @@ class MainWindow(QMainWindow):
         self.separator_check = QCheckBox("Tyhjä välirivi välilehtien väliin")
         self.separator_check.toggled.connect(lambda _c: self.update_preview())
         left_layout.addWidget(self.separator_check)
+        self.contact_check = QCheckBox(CONTACT_QUESTION.rstrip("?"))
+        self.contact_check.toggled.connect(lambda _c: self.update_preview())
+        left_layout.addWidget(self.contact_check)
+        self.contact_hint = _label("", "muted")
+        self.contact_hint.setWordWrap(True)
+        left_layout.addWidget(self.contact_hint)
         left_layout.addStretch()
 
         # 3 · Esikatselu
@@ -361,6 +368,16 @@ class MainWindow(QMainWindow):
         self.excel_edit.setText(_short_path(self.excel_path))
         self.excel_edit.setToolTip(str(self.excel_path))
         self.separator_check.setChecked(self.config.separator_row_between_sheets)
+        teacher = self.config.teacher
+        self.contact_check.blockSignals(True)
+        self.contact_check.setEnabled(teacher.is_configured())
+        self.contact_check.setChecked(teacher.is_configured() and teacher.default)
+        self.contact_check.blockSignals(False)
+        self.contact_hint.setText(
+            f"{teacher.name}{theme.MIDDOT}{teacher.email}{theme.MIDDOT}{teacher.phone}".strip(" ·")
+            if teacher.is_configured()
+            else "Lisää opettajan nimi, sähköposti ja puhelin Asetukset → Opettaja."
+        )
         self.reload_excel()
 
     def reload_excel(self) -> None:
@@ -453,6 +470,11 @@ class MainWindow(QMainWindow):
                 sheets.append(read_sheet(self.excel_path, name, self.config.excel_columns))
             except ExcelError as exc:
                 log.error(str(exc))
+        if self.contact_check.isChecked():
+            contact_sheet = self.config.teacher.sheet(self.config.field_names)
+            if contact_sheet is not None:
+                sheets.append(contact_sheet)
+                names = [*names, contact_sheet.name]
         self._preview_sheets = sheets
         self._preview_rows = [(sheet, row) for sheet in sheets for row in sheet.rows]
         fields = self.config.field_names

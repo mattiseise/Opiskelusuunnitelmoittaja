@@ -16,11 +16,12 @@ from pathlib import Path
 from . import __version__
 from .browser import BrowserError, connect, find_form_page, launch_chrome
 from .config import Config, ConfigError, load_config
+from .contact import QUESTION as CONTACT_QUESTION
 from .excel import ExcelError, Sheet, list_sheets, read_sheet, resolve_sheet_selection
 from .filler import FormFiller, Summary
 from .logsetup import setup_logging
 from .paths import ensure_user_files, is_frozen, user_config_path
-from .wizard import WizardCancelled, run_wizard
+from .wizard import WizardCancelled, ask_yes_no, run_wizard
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -62,6 +63,20 @@ def build_parser() -> argparse.ArgumentParser:
     fill.add_argument(
         "--no-separator", action="store_true", help="ei tyhjää väliriviä välilehtien väliin"
     )
+    contact = fill.add_mutually_exclusive_group()
+    contact.add_argument(
+        "--yhteystiedot",
+        dest="contact",
+        action="store_true",
+        default=None,
+        help="lisää opettajan yhteystiedot alimmaksi riviksi (asetukset: teacher)",
+    )
+    contact.add_argument(
+        "--ei-yhteystietoja",
+        dest="contact",
+        action="store_false",
+        help="älä lisää yhteystietoriviä",
+    )
     return parser
 
 
@@ -90,7 +105,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             case "sheets":
                 return cmd_sheets(config)
             case "fill":
-                return cmd_fill(config, args.sheets, dry_run=args.dry_run, assume_yes=args.yes)
+                return cmd_fill(
+                    config,
+                    args.sheets,
+                    dry_run=args.dry_run,
+                    assume_yes=args.yes,
+                    contact=args.contact,
+                )
     except (ExcelError, BrowserError, ValueError) as exc:
         print(f"\nVirhe: {exc}", file=sys.stderr)
         return 1
@@ -127,8 +148,16 @@ def cmd_sheets(config: Config) -> int:
     return 0
 
 
-def cmd_fill(config: Config, selection: str | None, *, dry_run: bool, assume_yes: bool) -> int:
+def cmd_fill(
+    config: Config,
+    selection: str | None,
+    *,
+    dry_run: bool,
+    assume_yes: bool,
+    contact: bool | None = None,
+) -> int:
     available = list_sheets(config.excel_file)
+    interactive = selection is None
     if selection is not None:
         chosen = resolve_sheet_selection(selection, available)
     elif config.wizard is not None:
@@ -147,6 +176,19 @@ def cmd_fill(config: Config, selection: str | None, *, dry_run: bool, assume_yes
     sheets: list[Sheet] = [
         read_sheet(config.excel_file, name, config.excel_columns) for name in chosen
     ]
+    contact_sheet = config.teacher.sheet(config.field_names)
+    if contact_sheet is not None:
+        if contact is None:
+            contact = (
+                ask_yes_no(CONTACT_QUESTION, default=config.teacher.default)
+                if interactive
+                else config.teacher.default
+            )
+        if contact:
+            sheets.append(contact_sheet)
+            chosen = [*chosen, contact_sheet.name]
+    elif contact:
+        print("Huom. opettajan yhteystietoja ei ole asetuksissa (teacher), riviä ei lisätä.")
     total = sum(len(s.rows) for s in sheets)
     print(f"\nTäytetään {total} riviä välilehdiltä: {', '.join(chosen)}")
 

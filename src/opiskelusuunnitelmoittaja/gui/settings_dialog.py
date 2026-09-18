@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..config import BrowserConfig, Config, Selectors, save_config
+from ..contact import DEFAULT_TEMPLATE, TeacherContact
 from ..wizard import OptionalSheet, WizardConfig
 from .theme import MIDDOT
 
@@ -47,6 +49,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(tabs, 1)
         tabs.addTab(self._build_general(), "Yleiset")
         tabs.addTab(self._build_wizard(), "Kysely")
+        tabs.addTab(self._build_teacher(), "Opettaja")
         tabs.addTab(self._build_selectors(), "Lomake")
 
         path_label = QLabel(f"Tallennetaan tiedostoon{MIDDOT}{config_path}")
@@ -139,6 +142,37 @@ class SettingsDialog(QDialog):
             buttons.addWidget(b)
         buttons.addStretch()
         layout.addLayout(buttons)
+        return w
+
+    def _build_teacher(self) -> QWidget:
+        w = QWidget()
+        form = QFormLayout(w)
+        tc = self.config.teacher
+        self.teacher_name = QLineEdit(tc.name)
+        form.addRow("Nimi", self.teacher_name)
+        self.teacher_email = QLineEdit(tc.email)
+        form.addRow("Sähköposti", self.teacher_email)
+        self.teacher_phone = QLineEdit(tc.phone)
+        form.addRow("Puhelin", self.teacher_phone)
+        self.teacher_default = QCheckBox("Ehdota yhteystietoriviä oletuksena")
+        self.teacher_default.setChecked(tc.default)
+        form.addRow("", self.teacher_default)
+        self.teacher_field = QComboBox()
+        for f in self.config.field_names:
+            self.teacher_field.addItem(f)
+        idx = self.teacher_field.findText(tc.field)
+        self.teacher_field.setCurrentIndex(idx if idx >= 0 else 0)
+        form.addRow("Teksti kenttään", self.teacher_field)
+        self.teacher_template = QPlainTextEdit(tc.template)
+        self.teacher_template.setMinimumHeight(110)
+        form.addRow("Rivin teksti", self.teacher_template)
+        hint = QLabel(
+            "Paikkamerkit: <Nimi>, <sähköpostiosoite>, <puhelinnumero>. "
+            "Tyhjä kenttä palauttaa oletustekstin."
+        )
+        hint.setProperty("role", "muted")
+        hint.setWordWrap(True)
+        form.addRow("", hint)
         return w
 
     def _build_selectors(self) -> QWidget:
@@ -239,6 +273,14 @@ class SettingsDialog(QDialog):
                 input_in_cell=self.input_in_cell.text().strip(),
             ),
             excel_columns=excel_columns,
+            teacher=TeacherContact(
+                name=self.teacher_name.text().strip(),
+                email=self.teacher_email.text().strip(),
+                phone=self.teacher_phone.text().strip(),
+                template=self.teacher_template.toPlainText().strip() or DEFAULT_TEMPLATE,
+                field=self.teacher_field.currentText() or "osaamistavoite",
+                default=self.teacher_default.isChecked(),
+            ),
             empty_value=self.empty_value.text(),
             separator_row_between_sheets=self.separator.isChecked(),
             max_attempts=self.max_attempts.value(),
