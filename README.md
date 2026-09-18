@@ -38,6 +38,9 @@ tulee paketin mukana. Pakettien latauspaikka: [Releases](https://github.com/matt
 
 Asetukset ja Excel-pohja kopioidaan ensimmäisellä käynnistyksellä kansioon
 `~/Library/Application Support/OpintosuunnitelmanTayttaja/` (Tiedosto → *Avaa asetuskansio*).
+Myös kehitysversio käyttää tätä kansiota, joten opettajan yhteystiedot eivät päädy repon
+`config.json`-tiedostoon; komentorivi (`uv run suunnitelmoittaja`) lukee edelleen repon
+`config.json`-tiedostoa, tai annetun `-c`-tiedoston.
 
 **Kehitysversio lähdekoodista** (Homebrew ja uv):
 

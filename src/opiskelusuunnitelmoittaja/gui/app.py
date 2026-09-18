@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from .. import APP_TITLE
-from ..paths import ensure_user_files, is_frozen, resource_path, user_config_path
+from ..paths import ensure_user_files, resource_path, user_config_path
 
 
 def icon_path() -> Path | None:
@@ -18,12 +18,14 @@ def icon_path() -> Path | None:
 
 
 def resolve_config_path(argv: list[str]) -> Path:
-    """Asetustiedosto: argumentti > käyttäjän data-hakemisto (paketoitu) > ./config.json."""
+    """Asetustiedosto: argumentti tai käyttäjän oma data-hakemisto.
+
+    GUI ei kirjoita repon config.jsoniin edes kehitysajossa, jotta opettajan yhteystiedot
+    eivät päädy versionhallintaan. Ensimmäisellä käynnistyksellä repon (tai paketin)
+    config.json ja Excel kopioidaan pohjaksi käyttäjän hakemistoon.
+    """
     if len(argv) > 1 and argv[1].endswith(".json"):
         return Path(argv[1]).expanduser().resolve()
-    local = Path("config.json")
-    if not is_frozen() and local.exists():
-        return local.resolve()
     ensure_user_files()
     return user_config_path()
 
