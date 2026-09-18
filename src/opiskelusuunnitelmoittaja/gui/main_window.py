@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -46,6 +47,7 @@ from .settings_dialog import SettingsDialog
 from .worker import FillWorker, QtLogHandler
 
 log = logging.getLogger("suunnitelmoittaja.gui")
+TIME_FIELD = "suoritusajankohta"
 
 LEVEL_COLORS = {"WARNING": "#9C7A3A", "ERROR": "#69013B", "CRITICAL": "#4A0029"}
 
@@ -60,6 +62,9 @@ class MainWindow(QMainWindow):
         self._available_sheets: list[str] = []
         self._preview_sheets: list[Sheet] = []
         self._preview_rows: list[tuple[Sheet, PlanRow]] = []
+        self._time_overrides: dict[
+            tuple[str, int], str
+        ] = {}  # (välilehti, rivi-indeksi) → ajankohta
 
         self.setWindowTitle(APP_TITLE)
         self.resize(1080, 760)
@@ -255,6 +260,16 @@ class MainWindow(QMainWindow):
 
         # 3 · Esikatselu
         step3 = self._step_header("3", "Esikatselu")
+        self.btn_set_time = QPushButton("Aseta ajankohta valituille")
+        self.btn_set_time.setProperty("variant", "link")
+        self.btn_set_time.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_set_time.setToolTip(
+            "Kirjoittaa saman suoritusajankohdan kaikille rastitetuille riveille. "
+            "Yksittäisen rivin ajankohtaa voi muokata kaksoisnapsauttamalla solua."
+        )
+        self.btn_set_time.clicked.connect(self.set_time_for_checked)
+        step3.addWidget(self.btn_set_time)
+        step3.addWidget(_label("·", "muted"))
         self.preview_label = _label("", "caps")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         step3.addWidget(self.preview_label)
@@ -285,11 +300,16 @@ class MainWindow(QMainWindow):
         self._place_header_check()
         hh.setHighlightSections(False)
         self.preview.setFont(theme.sans(13))
-        self.preview.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.preview.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        # Vain Ajankohta-solut ovat muokattavia (ItemIsEditable asetetaan riveittäin)
+        self.preview.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+            | QAbstractItemView.EditTrigger.AnyKeyPressed
+        )
+        self.preview.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.preview.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self.preview.setShowGrid(False)
         self.preview.setAlternatingRowColors(True)
-        self.preview.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.preview.verticalHeader().setVisible(False)
         self.preview.verticalHeader().setDefaultSectionSize(34)
         self.preview.setWordWrap(False)
@@ -490,7 +510,17 @@ class MainWindow(QMainWindow):
             self.preview.setItem(r, 0, check)
             self.preview.setItem(r, 1, QTableWidgetItem(sheet.name))
             for col, field in enumerate(fields[:4], start=2):
-                self.preview.setItem(r, col, QTableWidgetItem(row.values.get(field, "")))
+                value = row.values.get(field, "")
+                item = QTableWidgetItem(value)
+                if field == TIME_FIELD:
+                    override = self._time_overrides.get(self._row_key(r))
+                    if override is not None:
+                        item.setText(override)
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+                    item.setToolTip("Kaksoisnapsauta muokataksesi suoritusajankohtaa")
+                else:
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.preview.setItem(r, col, item)
         self.preview.blockSignals(False)
         self._refresh_preview_summary(names)
 
@@ -505,16 +535,55 @@ class MainWindow(QMainWindow):
     def selected_sheets_for_fill(self) -> list[Sheet]:
         """Esikatselussa rastitut rivit välilehdittäin, alkuperäisessä järjestyksessä."""
         checked = set(self.checked_row_indices())
+        time_col = self._time_column()
         result: list[Sheet] = []
         for sheet in self._preview_sheets:
-            rows = [
-                row
-                for idx, (s, row) in enumerate(self._preview_rows)
-                if s is sheet and idx in checked
-            ]
+            rows: list[PlanRow] = []
+            for idx, (s, row) in enumerate(self._preview_rows):
+                if s is not sheet or idx not in checked:
+                    continue
+                item = self.preview.item(idx, time_col) if time_col is not None else None
+                if item is not None and item.text() != row.values.get(TIME_FIELD, ""):
+                    rows.append(PlanRow({**row.values, TIME_FIELD: item.text().strip()}))
+                else:
+                    rows.append(row)
             if rows:
                 result.append(Sheet(sheet.name, rows))
         return result
+
+    def _time_column(self) -> int | None:
+        fields = self.config.field_names[:4]
+        return 2 + fields.index(TIME_FIELD) if TIME_FIELD in fields else None
+
+    def _row_key(self, r: int) -> tuple[str, int]:
+        """Vakaa avain riville: (välilehti, rivin järjestysnumero välilehdellä)."""
+        sheet, _row = self._preview_rows[r]
+        first = next(i for i, (s, _r) in enumerate(self._preview_rows) if s is sheet)
+        return (sheet.name, r - first)
+
+    def set_time_for_checked(self) -> None:
+        time_col = self._time_column()
+        if time_col is None:
+            return
+        checked = self.checked_row_indices()
+        if not checked:
+            return
+        current = self.preview.item(checked[0], time_col)
+        text, ok = QInputDialog.getText(
+            self,
+            "Suoritusajankohta",
+            f"Ajankohta {len(checked)} valitulle riville (esim. 8/2026–5/2027):",
+            text=current.text() if current is not None else "",
+        )
+        if not ok:
+            return
+        self.preview.blockSignals(True)
+        for r in checked:
+            item = self.preview.item(r, time_col)
+            if item is not None:
+                item.setText(text.strip())
+                self._time_overrides[self._row_key(r)] = text.strip()
+        self.preview.blockSignals(False)
 
     def toggle_all_rows(self, *_args: object) -> None:
         """Otsikkorivin rasti: kaikki valittuna → poista valinnat, muuten → valitse kaikki."""
@@ -531,6 +600,8 @@ class MainWindow(QMainWindow):
     def _on_preview_item_changed(self, item: QTableWidgetItem) -> None:
         if item.column() == 0:
             self._refresh_preview_summary(self.selected_sheet_names())
+        elif item.column() == self._time_column() and 0 <= item.row() < len(self._preview_rows):
+            self._time_overrides[self._row_key(item.row())] = item.text().strip()
 
     def _refresh_preview_summary(self, names: list[str]) -> None:
         total = self.preview.rowCount()

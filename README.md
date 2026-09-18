@@ -12,6 +12,10 @@ pandas openpyxl:llä, ja projekti käyttää `pyproject.toml`-määrittelyä ja 
 Toimii macOS:llä, Windowsilla ja Linuxilla. Versiossa 2.1 on graafinen käyttöliittymä ja
 valmiit sovelluspaketit.
 
+![Pääikkuna](docs/kuvat/01-paaikkuna.png)
+
+*Kuvien data on keksittyä esimerkkidataa.*
+
 ## Pikaohjeet alustoittain
 
 Sovellus tarvitsee koneelta Google Chromen. Kaikki muu (Python, Playwright-ajuri, fontit)
@@ -122,14 +126,25 @@ git push origin v2.1.0
 3. Valitse pääsuuntaus ja rastita lisävalinnat (lukio, YTO, väylä), tai valitse välilehdet käsin.
    Esikatselu näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
 4. Rastita esikatselusta vietävät rivit (oletuksena kaikki; otsikkorivin rasti valitsee tai
-   poistaa kaikki kerralla) ja paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa;
-   *Keskeytä* pysäyttää rivin jälkeen.
-5. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
+   poistaa kaikki kerralla). *Ajankohta*-solua voi muokata kaksoisnapsauttamalla, ja
+   *Aseta ajankohta valituille* kirjoittaa saman ajankohdan kaikille rastitetuille riveille
+   (esim. `8/2026–5/2027`). Muokkaukset viedään lomakkeelle Excelin arvon sijaan.
+
+   ![Esikatselu muokattuna](docs/kuvat/02-esikatselu-muokattu.png)
+
+5. Paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin
+   jälkeen.
+
+   ![Täyttö käynnissä](docs/kuvat/03-taytto.png)
+6. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
 
 Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset*-ikkunassa.
 
-**Opettajan yhteystiedot alimmaksi riviksi.** Asetukset → *Opettaja*: nimi, sähköposti ja
-puhelin. Sen jälkeen vaiheessa 2 on rasti "Lisätäänkö opettajan yhteystiedot alimmaksi riviksi",
+**Opettajan yhteystiedot alimmaksi riviksi.** Asetukset avautuu *Opettaja*-välilehteen: nimi,
+sähköposti ja puhelin.
+
+![Asetukset – Opettaja](docs/kuvat/04-asetukset-opettaja.png)
+ Sen jälkeen vaiheessa 2 on rasti "Lisätäänkö opettajan yhteystiedot alimmaksi riviksi",
 ja esikatselun viimeiseksi tulee rivi *Yhteystiedot*, jonka teksti on oletuksena
 
 > Opiskelijalla on henkilökohtainen opintosuunnitelma ja hän etenee siinä omaan tahtiinsa.
@@ -155,6 +170,8 @@ kirjataan lokiin `logs/app.log`. `-v` näyttää etenemislokin konsolissa, `--de
 `uv run suunnitelmoittaja sheets` listaa Excelin välilehdet numeroituina.
 
 ### Ohjattu kysely
+
+![Asetukset – Kysely](docs/kuvat/05-asetukset-kysely.png)
 
 `fill` ilman välilehtiä kysyy, mitä opiskelijalle laitetaan: ensin pääsuuntaus
 (Ohjelmistokehittäjä / Kyber / IT-tuki), sitten kyllä/ei-kysymyksinä kaksoistutkinto (Lukio),

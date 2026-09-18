@@ -47,10 +47,12 @@ class SettingsDialog(QDialog):
         layout.setSpacing(14)
         tabs = QTabWidget()
         layout.addWidget(tabs, 1)
+        tabs.addTab(self._build_teacher(), "Opettaja")
         tabs.addTab(self._build_general(), "Yleiset")
         tabs.addTab(self._build_wizard(), "Kysely")
-        tabs.addTab(self._build_teacher(), "Opettaja")
         tabs.addTab(self._build_selectors(), "Lomake")
+        tabs.setCurrentIndex(0)
+        self.tabs = tabs
 
         path_label = QLabel(f"Tallennetaan tiedostoon{MIDDOT}{config_path}")
         path_label.setProperty("role", "muted")

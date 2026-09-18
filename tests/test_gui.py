@@ -136,6 +136,33 @@ def test_contact_row_in_preview_and_settings(qtbot, config_path: Path) -> None:
     assert win.preview.rowCount() == 2
 
 
+def test_time_column_editable_and_applied(qtbot, config_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    col = win._time_column()
+    assert col == 5
+    cell = win.preview.item(0, col)
+    assert cell is not None and bool(cell.flags() & Qt.ItemFlag.ItemIsEditable)
+    assert not bool(win.preview.item(0, 2).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
+
+    cell.setText("8/2026–5/2027")
+    sheets = win.selected_sheets_for_fill()
+    assert sheets[0].rows[0].values["suoritusajankohta"] == "8/2026–5/2027"
+    assert sheets[0].rows[1].values["suoritusajankohta"] == "syksy 2026"  # Excelin alkuperäinen
+
+    # muokkaus säilyy, kun esikatselu rakennetaan uudelleen (esim. rastin vaihto)
+    win.contact_check.setChecked(False)
+    win.update_preview()
+    assert win.preview.item(0, col).text() == "8/2026–5/2027"  # type: ignore[union-attr]
+
+
+def test_settings_dialog_opens_teacher_tab_first(qtbot, config_path: Path) -> None:
+    dialog = SettingsDialog(load_config(config_path), config_path)
+    qtbot.addWidget(dialog)
+    assert dialog.tabs.currentIndex() == 0
+    assert dialog.tabs.tabText(0) == "Opettaja"
+
+
 def test_settings_dialog_roundtrip(qtbot, config_path: Path) -> None:
     config = load_config(config_path)
     dialog = SettingsDialog(config, config_path)
