@@ -1,4 +1,6 @@
-# Opiskelusuunnitelmoittaja
+# Opintosuunnitelman täyttäjä
+
+(Repo ja Python-paketti: `Opiskelusuunnitelmoittaja` / `opiskelusuunnitelmoittaja`; komentorivikomento `suunnitelmoittaja`.)
 
 Täyttää opiskelusuunnitelmalomakkeen selaimessa Excel-taulukosta rivi kerrallaan, jotta samaa
 taulukkoa ei tarvitse naputella käsin joka opiskelijalle. Työkalu kytkeytyy sinun omaan, jo
@@ -27,18 +29,20 @@ Käyttö ikkunassa:
 2. Avaa Wilman opiskelusuunnitelmalomake siihen Chrome-ikkunaan.
 3. Valitse pääsuuntaus ja rastita lisävalinnat (lukio, YTO, väylä) tai valitse välilehdet käsin.
    Esikatselu näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
-4. **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin jälkeen.
+4. Rastita esikatselusta rivit, jotka viedään (oletuksena kaikki; *Valitse kaikki / Poista
+   valinnat* vaihtaa kerralla), ja paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa;
+   *Keskeytä* pysäyttää rivin jälkeen.
 5. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
 
 Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset*-ikkunassa.
 
-Ulkoasu noudattaa BC Helsingin design systemiä (`gui/theme.py`): pergamentti- ja burgunditokenit,
+Kuvakevaihtoehdot ovat kansiossa `packaging/icon-variants/`. Ulkoasu noudattaa BC Helsingin design systemiä (`gui/theme.py`): pergamentti- ja burgunditokenit,
 Public Sans ja Source Serif 4 (OFL-lisenssi, fontit pakataan mukaan), ei varjoja, ei
 kulmapyöristyksiä, ei ikoneita; erottimina keskipiste, numerot ja hairline-viivat.
 
 Paketit on allekirjoitettu ad hoc, ei Applen notarisointia. Jos macOS estää avauksen,
 valitse Järjestelmäasetukset → Tietosuoja ja suojaus → *Avaa silti*, tai aja
-`xattr -dr com.apple.quarantine /Applications/Opiskelusuunnitelmoittaja.app`. Windowsin
+`xattr -dr com.apple.quarantine "/Applications/Opintosuunnitelman täyttäjä.app"`. Windowsin
 SmartScreen: *Lisätietoja* → *Suorita silti*.
 
 ## Komentorivi ja kehitys
@@ -213,21 +217,21 @@ Kehitysversion saa napista käyntiin ilman PyInstalleria:
 scripts/make-launcher.sh --dock
 ```
 
-Tekee `~/Applications/Opiskelusuunnitelmoittaja (dev).app`-käynnistimen, joka ajaa
+Tekee `~/Applications/Opintosuunnitelman täyttäjä (dev).app`-käynnistimen, joka ajaa
 `uv run suunnitelmoittaja-gui` repokansiosta (koodimuutokset näkyvät heti), ja lisää sen
-Dockiin. Ikoni tehdään `packaging/icon.png`:stä. Loki: `~/Library/Logs/Opiskelusuunnitelmoittaja-dev.log`.
+Dockiin. Ikoni tehdään `packaging/icon.png`:stä. Loki: `~/Library/Logs/OpintosuunnitelmanTayttaja-dev.log`.
 Jaettava, uv:sta riippumaton sovellus rakennetaan alla olevalla tavalla.
 
 ### Sovelluspaketin rakentaminen
 
 ```bash
-scripts/build.sh                                           # macOS → dist/*.app + .dmg (Linux → .tar.gz)
+scripts/build.sh                                           # macOS → dist/Opintosuunnitelman täyttäjä.app + .dmg (Linux → .tar.gz)
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1  # Windows → dist/*.zip
 ```
 
-Paketointi käyttää PyInstalleria (`packaging/Opiskelusuunnitelmoittaja.spec`). Playwrightin
+Paketointi käyttää PyInstalleria (`packaging/OpintosuunnitelmanTayttaja.spec`). Playwrightin
 Node-ajuri pakataan mukaan, selainta ei: sovellus kytkeytyy käyttäjän omaan Chromeen.
-Paketoitua sovellusta voi ajaa myös komentoriviltä: `Opiskelusuunnitelmoittaja --cli fill 1`.
+Paketoitua sovellusta voi ajaa myös komentoriviltä: `OpintosuunnitelmanTayttaja --cli fill 1`.
 
 Julkaisu: `git tag v2.1.0 && git push --tags` käynnistää GitHub Actions -putken
 (`.github/workflows/release.yml`), joka ajaa testit, rakentaa macOS- ja Windows-paketit ja

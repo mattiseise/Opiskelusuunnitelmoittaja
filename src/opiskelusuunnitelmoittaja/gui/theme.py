@@ -167,6 +167,13 @@ def build_qss() -> str:
             stop:0 {t["brand"]}, stop:0.45 {t["brand"]}, stop:0.55 {t["bg"]}, stop:1 {t["bg"]});
         border-color: {t["brand"]};
     }}
+    QTableView::indicator, QListView::indicator {{
+        width: 15px; height: 15px; border: 1px solid {t["ink_soft"]}; background: {t["bg"]};
+        border-radius: 0;
+    }}
+    QTableView::indicator:checked, QListView::indicator:checked {{
+        background: {t["brand"]}; border-color: {t["brand"]};
+    }}
     QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {{ border-color: {t["hairline"]}; }}
     QCheckBox:disabled, QRadioButton:disabled {{ color: rgba(31,24,19,0.38); }}
 

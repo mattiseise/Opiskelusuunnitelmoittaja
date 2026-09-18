@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller-määrittely: Opiskelusuunnitelmoittaja GUI + Playwright-ajuri.
+"""PyInstaller-määrittely: Opintosuunnitelman täyttäjä (GUI) + Playwright-ajuri.
 
-Ajo repon juuresta:  uv run pyinstaller packaging/Opiskelusuunnitelmoittaja.spec --noconfirm
-Tulos: dist/Opiskelusuunnitelmoittaja/ (Linux/Windows) tai dist/Opiskelusuunnitelmoittaja.app (macOS).
+Ajo repon juuresta:  uv run pyinstaller packaging/OpintosuunnitelmanTayttaja.spec --noconfirm
+Tulos: dist/OpintosuunnitelmanTayttaja/ (Linux/Windows) tai dist/Opintosuunnitelman täyttäjä.app (macOS).
 """
 
 import sys
@@ -60,7 +60,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Opiskelusuunnitelmoittaja",
+    name="OpintosuunnitelmanTayttaja",
     debug=False,
     strip=False,
     upx=False,
@@ -75,20 +75,22 @@ coll = COLLECT(
     driver_tree,
     strip=False,
     upx=False,
-    name="Opiskelusuunnitelmoittaja",
+    name="OpintosuunnitelmanTayttaja",
 )
 
 if sys.platform == "darwin":
     app = BUNDLE(
         coll,
-        name="Opiskelusuunnitelmoittaja.app",
+        name="Opintosuunnitelman täyttäjä.app",
         icon=ICON,
-        bundle_identifier="fi.seise.opiskelusuunnitelmoittaja",
+        bundle_identifier="fi.seise.opintosuunnitelmantayttaja",
         info_plist={
             "CFBundleShortVersionString": "2.1.0",
             "CFBundleVersion": "2.1.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
             "NSHumanReadableCopyright": "Matti Seise",
+            "CFBundleDisplayName": "Opintosuunnitelman täyttäjä",
+            "CFBundleName": "Opintosuunnitelman täyttäjä",
         },
     )

@@ -26,7 +26,10 @@ from .wizard import WizardCancelled, run_wizard
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="suunnitelmoittaja",
-        description="Täyttää opiskelusuunnitelmalomakkeen Excel-taulukosta.",
+        description=(
+            "Opintosuunnitelman täyttäjä: täyttää Wilman opiskelusuunnitelmalomakkeen "
+            "Excel-taulukosta."
+        ),
         epilog=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

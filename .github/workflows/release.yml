@@ -79,9 +79,9 @@ jobs:
             Paketti on allekirjoitettu ad hoc (ei Apple-notarisointia), joten ensimmäisellä
             avauksella macOS voi estää sen. Avaa silloin Järjestelmäasetukset → Tietosuoja ja
             suojaus → *Avaa silti*, tai aja Terminaalissa:
-            `xattr -dr com.apple.quarantine /Applications/Opiskelusuunnitelmoittaja.app`
+            `xattr -dr com.apple.quarantine /Applications/Opintosuunnitelman\ täyttäjä.app`
 
-            **Windows:** pura `.zip` ja käynnistä `Opiskelusuunnitelmoittaja.exe`.
+            **Windows:** pura `.zip` ja käynnistä `OpintosuunnitelmanTayttaja.exe`.
             SmartScreen voi varoittaa tuntemattomasta julkaisijasta → *Lisätietoja* → *Suorita silti*.
 
             Sovellus tarvitsee Google Chromen. Asetukset ja Excel kopioidaan ensimmäisellä

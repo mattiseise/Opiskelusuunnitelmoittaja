@@ -62,8 +62,8 @@ def test_main_window_builds_selection_from_wizard(qtbot, config_path: Path) -> N
     # Rikki-välilehdeltä puuttuu sarakkeita → esikatselussa vain pääsuuntaus
     assert win.selected_sheet_names() == ["Ohjelmistokehittäjä", "Rikki"]
     assert win.preview.rowCount() == 2
-    assert win.preview.item(0, 1).text() == "Ohjelmointi"  # type: ignore[union-attr]
-    assert win.preview.item(0, 2).text() == "45"  # type: ignore[union-attr]
+    assert win.preview.item(0, 2).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(0, 3).text() == "45"  # type: ignore[union-attr]
 
     boxes[0].setChecked(False)
     win.main_group.buttons()[1].setChecked(True)
@@ -82,6 +82,29 @@ def test_manual_selection_mode(qtbot, config_path: Path) -> None:
             win.manual_list.item(i).setCheckState(Qt.CheckState.Checked)
     assert win.selected_sheet_names() == ["Kyber"]
     assert win.btn_fill.isEnabled()
+
+
+def test_preview_row_checkboxes_and_toggle(qtbot, config_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert win.preview.rowCount() == 2
+    assert win.checked_row_indices() == [0, 1]
+    assert win.btn_toggle_all.text() == "Poista valinnat"
+
+    win.preview.item(1, 0).setCheckState(Qt.CheckState.Unchecked)  # type: ignore[union-attr]
+    assert win.checked_row_indices() == [0]
+    assert win.preview_label.text().startswith("1 / 2 RIVIÄ")
+    assert win.btn_toggle_all.text() == "Valitse kaikki"
+    sheets = win.selected_sheets_for_fill()
+    assert [s.name for s in sheets] == ["Ohjelmistokehittäjä"]
+    assert [r.values["osaamistavoite"] for r in sheets[0].rows] == ["Ohjelmointi"]
+
+    win.toggle_all_rows()  # ei kaikki valittuna → valitse kaikki
+    assert win.checked_row_indices() == [0, 1]
+    win.toggle_all_rows()  # kaikki valittuna → poista valinnat
+    assert win.checked_row_indices() == []
+    assert not win.btn_fill.isEnabled()
+    assert win.selected_sheets_for_fill() == []
 
 
 def test_settings_dialog_roundtrip(qtbot, config_path: Path) -> None:

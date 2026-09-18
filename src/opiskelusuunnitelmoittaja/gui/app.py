@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from .. import APP_TITLE
 from ..paths import ensure_user_files, is_frozen, resource_path, user_config_path
 
 
@@ -30,7 +31,7 @@ def resolve_config_path(argv: list[str]) -> Path:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
     if "--cli" in argv:
-        # Paketoitu sovellus komentoriviltä: Opiskelusuunnitelmoittaja --cli fill 1
+        # Paketoitu sovellus komentoriviltä: OpintosuunnitelmanTayttaja --cli fill 1
         from ..cli import main as cli_main
 
         rest = [a for a in argv[1:] if a != "--cli"]
@@ -42,7 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     from .main_window import MainWindow
 
     app = QApplication(argv)
-    app.setApplicationName("Opiskelusuunnitelmoittaja")
+    app.setApplicationName(APP_TITLE)
+    app.setApplicationDisplayName(APP_TITLE)
     app.setOrganizationName("Seise")
     theme.apply(app)
     icon = icon_path()

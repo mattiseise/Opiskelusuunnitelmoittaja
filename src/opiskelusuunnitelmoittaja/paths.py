@@ -3,8 +3,8 @@
 Kehityksessä resurssit (config.json, Opintosuunnitelmat.xlsx) ovat repon juuressa.
 PyInstaller-paketissa ne ovat ``sys._MEIPASS``-hakemistossa, joka on vain luettava,
 joten muokattavat kopiot viedään ensimmäisellä käynnistyksellä käyttäjän
-data-hakemistoon (macOS: ~/Library/Application Support/Opiskelusuunnitelmoittaja,
-Windows: %APPDATA%\\Opiskelusuunnitelmoittaja, Linux: ~/.local/share/opiskelusuunnitelmoittaja).
+data-hakemistoon (macOS: ~/Library/Application Support/OpintosuunnitelmanTayttaja,
+Windows: %APPDATA%\\OpintosuunnitelmanTayttaja, Linux: ~/.local/share/opintosuunnitelmantayttaja).
 Ympäristömuuttuja ``SUUNNITELMOITTAJA_HOME`` ohittaa data-hakemiston.
 """
 
@@ -16,7 +16,9 @@ import shutil
 import sys
 from pathlib import Path
 
-APP_NAME = "Opiskelusuunnitelmoittaja"
+from . import APP_SLUG
+
+APP_NAME = APP_SLUG
 USER_FILES = ("config.json", "Opintosuunnitelmat.xlsx")
 
 

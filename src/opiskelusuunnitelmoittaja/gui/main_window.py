@@ -34,10 +34,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__
+from .. import APP_TITLE, __version__
 from ..browser import BrowserError, is_chrome_listening, launch_chrome
 from ..config import Config, ConfigError, load_config
-from ..excel import ExcelError, Sheet, list_sheets, read_sheet
+from ..excel import ExcelError, PlanRow, Sheet, list_sheets, read_sheet
 from ..filler import Summary
 from ..logsetup import setup_logging
 from . import theme
@@ -54,12 +54,13 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.config_path = config_path
         self.config: Config = Config()
-        self.settings = QSettings("Seise", "Opiskelusuunnitelmoittaja")
+        self.settings = QSettings("Seise", "OpintosuunnitelmanTayttaja")
         self.worker: FillWorker | None = None
         self._available_sheets: list[str] = []
         self._preview_sheets: list[Sheet] = []
+        self._preview_rows: list[tuple[Sheet, PlanRow]] = []
 
-        self.setWindowTitle(f"Opiskelusuunnitelmoittaja {__version__}")
+        self.setWindowTitle(APP_TITLE)
         self.resize(1080, 760)
 
         self._build_menu()
@@ -114,7 +115,7 @@ class MainWindow(QMainWindow):
         title_box = QVBoxLayout()
         title_box.setSpacing(4)
         eyebrow = _label("BUSINESS COLLEGE HELSINKI · OPISKELUSUUNNITELMAT", "eyebrow")
-        title = _label("Opiskelusuunnitelmoittaja", "title")
+        title = _label(APP_TITLE, "title")
         title_box.addWidget(eyebrow)
         title_box.addWidget(title)
         h.addLayout(title_box, 1)
@@ -247,21 +248,30 @@ class MainWindow(QMainWindow):
 
         # 3 · Esikatselu
         step3 = self._step_header("3", "Esikatselu")
+        self.btn_toggle_all = QPushButton("Poista valinnat")
+        self.btn_toggle_all.setProperty("variant", "link")
+        self.btn_toggle_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_toggle_all.clicked.connect(self.toggle_all_rows)
+        step3.addWidget(self.btn_toggle_all)
+        step3.addWidget(_label("·", "muted"))
         self.preview_label = _label("", "caps")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         step3.addWidget(self.preview_label)
         right_layout.addLayout(step3)
-        self.preview = QTableWidget(0, 5)
+        self.preview = QTableWidget(0, 6)
         self.preview.setHorizontalHeaderLabels(
-            ["Välilehti", "Osaamistavoite", "Laajuus", "Suoritustapa", "Ajankohta"]
+            ["", "Välilehti", "Osaamistavoite", "Laajuus", "Suoritustapa", "Ajankohta"]
         )
         hh = self.preview.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setMinimumSectionSize(72)
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        hh.resizeSection(0, 36)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setMinimumSectionSize(36)
+        self.preview.itemChanged.connect(self._on_preview_item_changed)
         hh.setHighlightSections(False)
         self.preview.setFont(theme.sans(13))
         self.preview.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -440,21 +450,73 @@ class MainWindow(QMainWindow):
             except ExcelError as exc:
                 log.error(str(exc))
         self._preview_sheets = sheets
+        self._preview_rows = [(sheet, row) for sheet in sheets for row in sheet.rows]
         fields = self.config.field_names
 
+        self.preview.blockSignals(True)
         self.preview.setRowCount(0)
-        for sheet in sheets:
-            for row in sheet.rows:
-                r = self.preview.rowCount()
-                self.preview.insertRow(r)
-                self.preview.setItem(r, 0, QTableWidgetItem(sheet.name))
-                for col, field in enumerate(fields[:4], start=1):
-                    self.preview.setItem(r, col, QTableWidgetItem(row.values.get(field, "")))
-        total = sum(len(s.rows) for s in sheets)
+        for sheet, row in self._preview_rows:
+            r = self.preview.rowCount()
+            self.preview.insertRow(r)
+            check = QTableWidgetItem()
+            check.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+            check.setCheckState(Qt.CheckState.Checked)
+            self.preview.setItem(r, 0, check)
+            self.preview.setItem(r, 1, QTableWidgetItem(sheet.name))
+            for col, field in enumerate(fields[:4], start=2):
+                self.preview.setItem(r, col, QTableWidgetItem(row.values.get(field, "")))
+        self.preview.blockSignals(False)
+        self._refresh_preview_summary(names)
+
+    def checked_row_indices(self) -> list[int]:
+        return [
+            r
+            for r in range(self.preview.rowCount())
+            if (item := self.preview.item(r, 0)) is not None
+            and item.checkState() == Qt.CheckState.Checked
+        ]
+
+    def selected_sheets_for_fill(self) -> list[Sheet]:
+        """Esikatselussa rastitut rivit välilehdittäin, alkuperäisessä järjestyksessä."""
+        checked = set(self.checked_row_indices())
+        result: list[Sheet] = []
+        for sheet in self._preview_sheets:
+            rows = [
+                row
+                for idx, (s, row) in enumerate(self._preview_rows)
+                if s is sheet and idx in checked
+            ]
+            if rows:
+                result.append(Sheet(sheet.name, rows))
+        return result
+
+    def toggle_all_rows(self) -> None:
+        all_checked = len(self.checked_row_indices()) == self.preview.rowCount()
+        state = Qt.CheckState.Unchecked if all_checked else Qt.CheckState.Checked
+        self.preview.blockSignals(True)
+        for r in range(self.preview.rowCount()):
+            item = self.preview.item(r, 0)
+            if item is not None:
+                item.setCheckState(state)
+        self.preview.blockSignals(False)
+        self._refresh_preview_summary(self.selected_sheet_names())
+
+    def _on_preview_item_changed(self, item: QTableWidgetItem) -> None:
+        if item.column() == 0:
+            self._refresh_preview_summary(self.selected_sheet_names())
+
+    def _refresh_preview_summary(self, names: list[str]) -> None:
+        total = self.preview.rowCount()
+        checked = len(self.checked_row_indices())
+        count = f"{checked} / {total} RIVIÄ" if checked != total else f"{total} RIVIÄ"
         self.preview_label.setText(
-            f"{total} RIVIÄ" + (f"{theme.MIDDOT}{', '.join(names).upper()}" if names else "")
+            count + (f"{theme.MIDDOT}{', '.join(names).upper()}" if names else "")
         )
-        self.btn_fill.setEnabled(total > 0 and self.worker is None)
+        self.btn_toggle_all.setText(
+            "Poista valinnat" if checked == total and total > 0 else "Valitse kaikki"
+        )
+        self.btn_toggle_all.setEnabled(total > 0)
+        self.btn_fill.setEnabled(checked > 0 and self.worker is None)
 
     # ------------------------------------------------------------------ toiminnot
 
@@ -508,7 +570,7 @@ class MainWindow(QMainWindow):
     def start_fill(self) -> None:
         if self.worker is not None:
             return
-        sheets = self._preview_sheets
+        sheets = self.selected_sheets_for_fill()
         total = sum(len(s.rows) for s in sheets)
         if total == 0:
             return
@@ -549,7 +611,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Keskeytetään nykyisen rivin jälkeen…")
 
     def _set_running(self, running: bool) -> None:
-        self.btn_fill.setEnabled(not running and bool(self._preview_sheets))
+        self.btn_fill.setEnabled(not running and bool(self.checked_row_indices()))
         self.btn_stop.setEnabled(running)
         self.group_main.setEnabled(not running and not self.manual_toggle.isChecked())
         self.group_optional.setEnabled(not running and not self.manual_toggle.isChecked())
@@ -618,8 +680,8 @@ class MainWindow(QMainWindow):
     def show_about(self) -> None:
         QMessageBox.about(
             self,
-            "Opiskelusuunnitelmoittaja",
-            f"<b>Opiskelusuunnitelmoittaja {__version__}</b><br>"
+            APP_TITLE,
+            f"<b>{APP_TITLE} {__version__}</b><br>"
             "Täyttää Wilman opiskelusuunnitelmalomakkeen Excel-taulukosta.<br><br>"
             f"Asetukset: {self.config_path}<br>"
             "Matti Seise · Business College Helsinki",
