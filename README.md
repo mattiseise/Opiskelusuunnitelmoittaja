@@ -205,6 +205,19 @@ uv run ruff check . && uv run ruff format --check .
 uv run pyright
 ```
 
+### Käynnistin Dockiin ilman pakettia (macOS)
+
+Kehitysversion saa napista käyntiin ilman PyInstalleria:
+
+```bash
+scripts/make-launcher.sh --dock
+```
+
+Tekee `~/Applications/Opiskelusuunnitelmoittaja (dev).app`-käynnistimen, joka ajaa
+`uv run suunnitelmoittaja-gui` repokansiosta (koodimuutokset näkyvät heti), ja lisää sen
+Dockiin. Ikoni tehdään `packaging/icon.png`:stä. Loki: `~/Library/Logs/Opiskelusuunnitelmoittaja-dev.log`.
+Jaettava, uv:sta riippumaton sovellus rakennetaan alla olevalla tavalla.
+
 ### Sovelluspaketin rakentaminen
 
 ```bash

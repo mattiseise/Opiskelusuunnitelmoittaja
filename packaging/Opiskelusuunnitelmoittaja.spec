@@ -26,6 +26,7 @@ driver_tree = Tree(
 datas = [
     (str(ROOT / "config.json"), "."),
     (str(ROOT / "Opintosuunnitelmat.xlsx"), "."),
+    (str(ROOT / "packaging" / "icon.png"), "."),
     # Public Sans + Source Serif 4 (OFL) samaan paikkaan, josta gui/theme.py ne lataa
     (str(ROOT / "src" / "opiskelusuunnitelmoittaja" / "gui" / "fonts"), "opiskelusuunnitelmoittaja/gui/fonts"),
 ]

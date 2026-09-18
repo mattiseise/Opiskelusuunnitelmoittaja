@@ -5,7 +5,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from ..paths import ensure_user_files, is_frozen, user_config_path
+from ..paths import ensure_user_files, is_frozen, resource_path, user_config_path
+
+
+def icon_path() -> Path | None:
+    """Sovelluskuvake: paketissa juuressa, kehityksessä packaging/-kansiossa."""
+    for candidate in (resource_path("icon.png"), resource_path("packaging") / "icon.png"):
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def resolve_config_path(argv: list[str]) -> Path:
@@ -37,6 +45,11 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName("Opiskelusuunnitelmoittaja")
     app.setOrganizationName("Seise")
     theme.apply(app)
+    icon = icon_path()
+    if icon is not None:
+        from PySide6.QtGui import QIcon
+
+        app.setWindowIcon(QIcon(str(icon)))
     window = MainWindow(resolve_config_path(argv))
     window.show()
     return app.exec()
