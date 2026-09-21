@@ -117,8 +117,8 @@ Versiotagi käynnistää GitHub Actions -putken, joka ajaa testit, rakentaa macO
 Windows-paketit ja liittää ne Releaseen asennusohjeineen:
 
 ```bash
-git tag v2.2.0
-git push origin v2.2.0
+git tag v2.3.0
+git push origin v2.3.0
 ```
 
 ## Käyttö ikkunassa
@@ -129,15 +129,21 @@ Ikkuna kulkee viidessä vaiheessa:
    säilyy kertojen välillä. Tila näkyy tekstinä ("Yhteys kunnossa · portti 9222").
 2. **Avaa opiskelijan opintokortti.** Siirry Chrome-ikkunassa Wilmaan, avaa opiskelijan
    opintokortti ja siitä Opintosuunnitelma-lomake muokkaustilassa. Jätä välilehti auki.
-3. **Valitse opinnot.** Valitse lähde-Excel (muistetaan), pääsuuntaus ja lisävalinnat (lukio,
-   YTO, väylä), tai välilehdet käsin. *Ohje Excelistä* kertoo, miten Excel rakennetaan.
+3. **Valitse opinnot.** Rivit tulevat esikatseluun kahdesta lähteestä, ja molempia voi käyttää
+   yhtä aikaa. **Wilma:** *Hae nykyiset rivit Wilmasta* lukee kohdassa 2 avatun lomakkeen rivit
+   esikatseluun lähteenä *Wilma*. Haku vaihtaa pääsuuntauksen vaihtoehtoon *Ei pääsuuntausta
+   Excelistä*; suuntauksen voi valita takaisin, jos Excelin rivit halutaan mukaan. *Poista*
+   tyhjentää Wilman rivit esikatselusta. **Excel:** valitse lähde-Excel (muistetaan; *Avaa
+   Excel* avaa sen muokattavaksi), pääsuuntaus ja lisävalinnat (lukio, YTO, väylä), tai
+   välilehdet käsin. *Ohje Excelistä* kertoo, miten Excel rakennetaan. Uudelle opiskelijalle
+   riittää pääsuuntaus Excelistä; vanhalle haetaan Wilman rivit, lisätään Excelistä puuttuvat
+   ja täytetään korvaustilassa.
 4. **Esikatselu ja muokkaus.** Taulukko näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
    Jokaisen solun voi muokata kaksoisnapsauttamalla, rivin rastin voi poistaa, otsikkorivin rasti
    valitsee tai poistaa kaikki, *Aseta ajankohta valituille* kirjoittaa saman ajankohdan
    rastitetuille. Rivin järjestystä vaihdetaan raahaamalla rivin alussa olevasta
-   tarttumasta ⋮⋮ (tai ▲▼-linkeillä). *Hae nykyiset rivit Wilmasta* lukee avoimen
-   lomakkeen rivit esikatseluun lähteenä *Wilma*: näin opiskelijan olemassa olevaa suunnitelmaa
-   voi järjestellä, muokata ja täydentää Excelin riveillä ilman Wilman käsityötä.
+   tarttumasta ⋮⋮ (tai ▲▼-linkeillä). Näin opiskelijan olemassa olevaa suunnitelmaa voi
+   järjestellä, muokata ja täydentää Excelin riveillä ilman Wilman käsityötä.
 
    ![Esikatselu muokattuna](docs/kuvat/02-esikatselu-muokattu.png)
 
@@ -335,7 +341,7 @@ Paketointi käyttää PyInstalleria (`packaging/OpintosuunnitelmanTayttaja.spec`
 Node-ajuri pakataan mukaan, selainta ei: sovellus kytkeytyy käyttäjän omaan Chromeen.
 Paketoitua sovellusta voi ajaa myös komentoriviltä: `OpintosuunnitelmanTayttaja --cli fill 1`.
 
-Julkaisu: `git tag v2.2.0 && git push --tags` käynnistää GitHub Actions -putken
+Julkaisu: `git tag v2.3.0 && git push --tags` käynnistää GitHub Actions -putken
 (`.github/workflows/release.yml`), joka ajaa testit, rakentaa macOS- ja Windows-paketit ja
 liittää ne GitHub Releaseen.
 

@@ -49,10 +49,12 @@ def test_main_window_builds_selection_from_wizard(qtbot, config_path: Path) -> N
     win = MainWindow(config_path)
     qtbot.addWidget(win)
 
-    # Vain Excelissä olevat pääsuuntaukset näkyvät; "Puuttuva" ei
+    # Vain Excelissä olevat pääsuuntaukset näkyvät; "Puuttuva" ei. Viimeisenä vaihtoehto
+    # "Ei pääsuuntausta Excelistä" (vain Wilman rivit ja lisävalinnat).
     names = [b.text() for b in win.main_group.buttons()]
-    assert names == ["Ohjelmistokehittäjä", "Kyber"]
+    assert names == ["Ohjelmistokehittäjä", "Kyber", "Ei pääsuuntausta Excelistä"]
     assert win.main_group.buttons()[0].isChecked()
+    assert win.rb_no_main is win.main_group.buttons()[2]
 
     # Vain Excelissä oleva lisävalinta näkyy, oletus kyllä
     boxes = [
@@ -178,6 +180,12 @@ def test_wilma_rows_edit_reorder_and_replace_mode(qtbot, config_path: Path) -> N
     ]
     win._on_wilma_rows(wilma)
     assert win.mode_replace.isChecked()
+    # Wilman haku vaihtaa pääsuuntauksen pois; Excelin suuntauksen voi valita takaisin
+    assert win.rb_no_main is not None and win.rb_no_main.isChecked()
+    assert win.preview.rowCount() == 2
+    assert "2 riviä haettu" in win.wilma_status.text()
+    assert win.btn_clear_wilma.isVisibleTo(win)
+    win.main_group.buttons()[0].setChecked(True)  # Ohjelmistokehittäjä takaisin
     assert [win.preview.item(r, 2).text() for r in range(4)] == [  # type: ignore[union-attr]
         "Wilma",
         "Wilma",
@@ -209,6 +217,43 @@ def test_wilma_rows_edit_reorder_and_replace_mode(qtbot, config_path: Path) -> N
 
     win.clear_wilma_rows()
     assert win.preview.rowCount() == 2
+    assert win.wilma_status.text().startswith("Ei haettu")
+    assert not win.btn_clear_wilma.isVisibleTo(win)
+
+
+def test_no_main_sheet_option_and_wilma_only(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.excel import PlanRow
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert win.rb_no_main is not None
+    win.rb_no_main.setChecked(True)
+    assert win.selected_sheet_names() == ["Rikki"]  # vain lisävalinta jää
+    assert win.preview.rowCount() == 0  # Rikki on rikki → ei rivejä
+    assert not win.btn_fill.isEnabled()
+
+    win._on_wilma_rows(
+        [
+            PlanRow(
+                {
+                    "osaamistavoite": "W1",
+                    "laajuus": "5",
+                    "suoritustapa": "",
+                    "suoritusajankohta": "",
+                }
+            )
+        ]
+    )
+    assert win.preview.rowCount() == 1
+    assert win.preview.item(0, 2).text() == "Wilma"  # type: ignore[union-attr]
+    assert win.btn_fill.isEnabled()
+    sheets = win.selected_sheets_for_fill()
+    assert [s.name for s in sheets] == ["Wilma"]
+
+    # Wilman rivien poisto palauttaa ensimmäisen pääsuuntauksen
+    win.clear_wilma_rows()
+    assert win.main_group.buttons()[0].isChecked()
+    assert win.selected_sheet_names() == ["Ohjelmistokehittäjä", "Rikki"]
 
 
 def test_fill_worker_replace_mode_clears_first(qtbot, config_path: Path, excel_file: Path) -> None:

@@ -96,6 +96,7 @@ class MainWindow(QMainWindow):
         self._order: list[tuple[str, int]] = []  # käyttäjän järjestys, jos riviä siirretty
         self._wilma_rows: list[PlanRow] = []
         self.reader: ReadWorker | None = None
+        self.rb_no_main: QRadioButton | None = None  # "Ei pääsuuntausta Excelistä"
         self.update_check: UpdateCheck | None = None
         self._update_worker: UpdateWorker | None = None
 
@@ -262,9 +263,53 @@ class MainWindow(QMainWindow):
         btn_excel_help.clicked.connect(self.show_excel_help)
         step3.addWidget(btn_excel_help)
         left_layout.addLayout(step3)
+        self.step3_hint = _label(
+            "Rivit tulevat esikatseluun kahdesta lähteestä, ja molempia voi käyttää yhtä aikaa. "
+            "Wilma: hae opiskelijan nykyinen suunnitelma, kun sitä pitää järjestellä, korjata tai "
+            "täydentää. Excel: valitse pääsuuntaus ja lisävalinnat, kun suunnitelma tehdään "
+            "valmiista pohjasta. Tyypillinen kulku vanhalle opiskelijalle: hae Wilman rivit, "
+            "lisää Excelistä puuttuvat, siisti järjestys kohdassa 4 ja täytä kohdassa 5 "
+            "korvaustilassa. Uudelle opiskelijalle riittää pääsuuntaus Excelistä.",
+            "muted",
+        )
+        self.step3_hint.setWordWrap(True)
+        self.step3_hint.setContentsMargins(0, 0, 0, 12)
+        left_layout.addWidget(self.step3_hint)
+
+        # 3a · Wilma
+        wilma_caps = QHBoxLayout()
+        wilma_caps.setSpacing(6)
+        wilma_caps.addWidget(_label("WILMA", "caps"))
+        wilma_caps.addStretch()
+        self.btn_read_wilma = QPushButton("Hae nykyiset rivit Wilmasta")
+        self.btn_read_wilma.setProperty("variant", "link")
+        self.btn_read_wilma.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_read_wilma.setToolTip(
+            "Lukee kohdassa 2 avatun opintosuunnitelmalomakkeen rivit esikatseluun, jossa niitä "
+            "voi muokata, järjestää ja yhdistää Excelin riveihin."
+        )
+        self.btn_read_wilma.clicked.connect(self.read_from_wilma)
+        wilma_caps.addWidget(self.btn_read_wilma)
+        self.wilma_dot = _label("·", "muted")
+        wilma_caps.addWidget(self.wilma_dot)
+        self.btn_clear_wilma = QPushButton("Poista")
+        self.btn_clear_wilma.setProperty("variant", "link")
+        self.btn_clear_wilma.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_clear_wilma.setToolTip("Poista Wilmasta haetut rivit esikatselusta")
+        self.btn_clear_wilma.clicked.connect(self.clear_wilma_rows)
+        wilma_caps.addWidget(self.btn_clear_wilma)
+        left_layout.addLayout(wilma_caps)
+        self.wilma_status = _label("", "muted")
+        self.wilma_status.setWordWrap(True)
+        self.wilma_status.setContentsMargins(0, 4, 0, 0)
+        left_layout.addWidget(self.wilma_status)
+        self._refresh_wilma_status()
+        left_layout.addWidget(_hairline(top=12, bottom=10))
+
+        # 3b · Excel
         excel_caps = QHBoxLayout()
         excel_caps.setSpacing(6)
-        excel_caps.addWidget(_label("LÄHDE-EXCEL", "caps"))
+        excel_caps.addWidget(_label("EXCEL", "caps"))
         excel_caps.addStretch()
         self.btn_open_excel = QPushButton("Avaa Excel")
         self.btn_open_excel.setProperty("variant", "link")
@@ -351,16 +396,6 @@ class MainWindow(QMainWindow):
 
         # 4 · Esikatselu ja muokkaus
         step4 = self._step_header("4", "Esikatselu ja muokkaus")
-        self.btn_read_wilma = QPushButton("Hae nykyiset rivit Wilmasta")
-        self.btn_read_wilma.setProperty("variant", "link")
-        self.btn_read_wilma.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_read_wilma.setToolTip(
-            "Lukee avoimen opintosuunnitelmalomakkeen rivit esikatseluun, jossa niitä voi "
-            "muokata, järjestää ja yhdistää Excelin riveihin."
-        )
-        self.btn_read_wilma.clicked.connect(self.read_from_wilma)
-        step4.addWidget(self.btn_read_wilma)
-        step4.addWidget(_label("·", "muted"))
         self.btn_set_time = QPushButton("Aseta ajankohta valituille")
         self.btn_set_time.setProperty("variant", "link")
         self.btn_set_time.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -570,6 +605,7 @@ class MainWindow(QMainWindow):
                     w.deleteLater()
         for b in self.main_group.buttons():
             self.main_group.removeButton(b)
+        self.rb_no_main = None
         self.manual_list.blockSignals(True)
         self.manual_list.clear()
 
@@ -582,6 +618,15 @@ class MainWindow(QMainWindow):
                 rb.toggled.connect(lambda _c: self.update_preview())
                 self.main_group.addButton(rb)
                 self.main_layout.addWidget(rb)
+            # Vaihtoehto pääsuuntaukselle: vain Wilman rivit (ja lisävalinnat)
+            self.rb_no_main = QRadioButton("Ei pääsuuntausta Excelistä")
+            self.rb_no_main.setToolTip(
+                "Käytä, kun opiskelijalla on jo suunnitelma Wilmassa: hae rivit Wilmasta, "
+                "ja ota Excelistä vain lisävalinnat. Pääsuuntauksen voi silti valita."
+            )
+            self.rb_no_main.toggled.connect(lambda _c: self.update_preview())
+            self.main_group.addButton(self.rb_no_main)
+            self.main_layout.addWidget(self.rb_no_main)
             self.main_group.buttons()[0].setChecked(True)
             for opt in wizard.optional_sheets:
                 if opt.sheet not in self._available_sheets:
@@ -641,7 +686,7 @@ class MainWindow(QMainWindow):
             ]
         chosen: list[str] = []
         checked = self.main_group.checkedButton()
-        if checked is not None:
+        if checked is not None and checked is not self.rb_no_main:
             chosen.append(checked.text())
         for i in range(self.optional_layout.count()):
             item = self.optional_layout.itemAt(i)
@@ -834,7 +879,11 @@ class MainWindow(QMainWindow):
             del self._edits[key]
         self._unchecked = {k for k in self._unchecked if k[0] != WILMA_SHEET}
         self._order = []
+        if rows and self.rb_no_main is not None and not self.manual_toggle.isChecked():
+            # Wilman rivit korvaavat pääsuuntauksen; Excelin suuntauksen voi valita takaisin
+            self.rb_no_main.setChecked(True)
         self.update_preview()
+        self._refresh_wilma_status()
         if rows:
             self.mode_replace.setChecked(True)
             self.statusBar().showMessage(
@@ -842,6 +891,21 @@ class MainWindow(QMainWindow):
             )
         else:
             self.statusBar().showMessage("Lomakkeella ei ole rivejä.", 4000)
+
+    def _refresh_wilma_status(self) -> None:
+        n = len(self._wilma_rows)
+        if n:
+            self.wilma_status.setText(
+                f"{n} riviä haettu. Ne näkyvät esikatselussa lähteenä Wilma; muokkaa ja "
+                "järjestä ne kohdassa 4. Valitse pääsuuntaus, jos haluat lisätä Excelin rivit."
+            )
+        else:
+            self.wilma_status.setText(
+                "Ei haettu. Lukee kohdassa 2 avatun lomakkeen rivit esikatseluun, jolloin "
+                "nykyistä suunnitelmaa voi muokata ja täydentää."
+            )
+        self.btn_clear_wilma.setVisible(n > 0)
+        self.wilma_dot.setVisible(n > 0)
 
     @Slot(str)
     def _on_wilma_failed(self, message: str) -> None:
@@ -855,7 +919,11 @@ class MainWindow(QMainWindow):
     def clear_wilma_rows(self) -> None:
         self._wilma_rows = []
         self._order = []
+        if self.rb_no_main is not None and self.rb_no_main.isChecked():
+            # ilman Wilman rivejä palataan ensimmäiseen pääsuuntaukseen
+            self.main_group.buttons()[0].setChecked(True)
         self.update_preview()
+        self._refresh_wilma_status()
 
     def toggle_all_rows(self, *_args: object) -> None:
         """Otsikkorivin rasti: kaikki valittuna → poista valinnat, muuten → valitse kaikki."""

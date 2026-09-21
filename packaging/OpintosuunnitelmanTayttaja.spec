@@ -85,8 +85,8 @@ if sys.platform == "darwin":
         icon=ICON,
         bundle_identifier="fi.seise.opintosuunnitelmantayttaja",
         info_plist={
-            "CFBundleShortVersionString": "2.2.0",
-            "CFBundleVersion": "2.2.0",
+            "CFBundleShortVersionString": "2.3.0",
+            "CFBundleVersion": "2.3.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
             "NSHumanReadableCopyright": "Matti Seise",
