@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fi">
+<head><meta charset="utf-8"><title>Opintosuunnitelma - Wilma (testikopio)</title></head>
+<body class="somebody">
+<!--
+  Wilman opintosuunnitelmalomakkeen rakenne (forms/42) karsittuna: sama taulukko, samat
+  id- ja name-kaavat, tallennetut rivit ilman poistonappia, lisäysnappi tfootissa.
+  Arvot ovat keksittyjä. Uuden rivin malli vastaa Wilman __model-kenttää: viides solu,
+  jossa poistonappi ...__remove.
+-->
+<main id="main-content">
+<form class="form-common dock" action="/forms/42/1" method="post">
+<input type="hidden" name="formkey" value="teacher:1:test">
+<div class="panel"><div class="panel-body">
+<h1>Suoritettavat opinnot</h1>
+<div class="table-responsive"><table class="table table-condensed">
+<thead>
+<tr><th>Osaamistavoite / tutkinnon osa</th><th>Laajuus (osp)</th><th>Suoritustapa / osaaminen hankitaan</th><th>Suoritusajankohta</th></tr>
+</thead>
+<tbody id="rows">
+<tr><td><input class="form-control text-field" type="text" name="prepeater9700-1-pfield9700" id="f-prepeater9700-1-pfield9700" value="Ohjelmoinnin perusteet"></td><td><input class="form-control text-field" type="text" name="prepeater9700-1-pfield9704" id="f-prepeater9700-1-pfield9704" value=""></td><td><input class="form-control text-field" type="text" name="prepeater9700-1-pfield9792" id="f-prepeater9700-1-pfield9792" value="Opiskelu Joustavassa / Itsenäinen opiskelu"></td><td><input class="form-control text-field" type="text" name="prepeater9700-1-pfield9703" id="f-prepeater9700-1-pfield9703" value="26.5-1.8.25"></td></tr>
+<tr><td><input class="form-control text-field" type="text" name="prepeater9700-2-pfield9700" id="f-prepeater9700-2-pfield9700" value="Taide ja luova ilmaisu 1osp"></td><td><input class="form-control text-field" type="text" name="prepeater9700-2-pfield9704" id="f-prepeater9700-2-pfield9704" value=""></td><td><input class="form-control text-field" type="text" name="prepeater9700-2-pfield9792" id="f-prepeater9700-2-pfield9792" value=" Itsenäinen opiskelu"></td><td><input class="form-control text-field" type="text" name="prepeater9700-2-pfield9703" id="f-prepeater9700-2-pfield9703" value="26.5-1.8.25"></td></tr>
+<tr><td><input class="form-control text-field" type="text" name="prepeater9700-3-pfield9700" id="f-prepeater9700-3-pfield9700" value="Äidinkieli 4 1osp"></td><td><input class="form-control text-field" type="text" name="prepeater9700-3-pfield9704" id="f-prepeater9700-3-pfield9704" value=""></td><td><input class="form-control text-field" type="text" name="prepeater9700-3-pfield9792" id="f-prepeater9700-3-pfield9792" value=" Itsenäinen opiskelu"></td><td><input class="form-control text-field" type="text" name="prepeater9700-3-pfield9703" id="f-prepeater9700-3-pfield9703" value="26.5-1.8.25"></td></tr>
+<tr><td><input class="form-control text-field" type="text" name="prepeater9700-4-pfield9700" id="f-prepeater9700-4-pfield9700" value="Terveystieto"></td><td><input class="form-control text-field" type="text" name="prepeater9700-4-pfield9704" id="f-prepeater9700-4-pfield9704" value="1 osp"></td><td><input class="form-control text-field" type="text" name="prepeater9700-4-pfield9792" id="f-prepeater9700-4-pfield9792" value=" Itsenäinen opiskelu"></td><td><input class="form-control text-field" type="text" name="prepeater9700-4-pfield9703" id="f-prepeater9700-4-pfield9703" value="26.5-1.8.25"></td></tr>
+</tbody>
+<tfoot>
+<tr><td colspan="4" class="repeater-buttons">
+<button type="submit" class="btn btn-default btn-icon" name="prepeater9700__add" id="f-prepeater9700__add" value="Lisää rivi" title="Lisää rivi">+</button>
+<input type="hidden" name="prepeater9700__count" id="f-prepeater9700__count" value="4">
+<input type="hidden" name="prepeater9700__removed" id="f-prepeater9700__removed" value="">
+</td></tr>
+</tfoot></table></div>
+</div></div>
+
+<div class="panel"><div class="panel-body">
+<h1>Pvm &amp; päivittäjä</h1>
+<div class="table-responsive"><table class="table table-condensed">
+<thead><tr><th>Päivitetty</th><th>Päivittäjä</th></tr></thead>
+<tbody id="meta-rows">
+<tr><td><input class="form-control date" type="text" name="prepeater2153-1-pfield2153" id="f-prepeater2153-1-pfield2153" value="14.4.2025"></td><td><input class="autocomplete form-control" type="text" name="prepeater2153-1-pfield2154" id="f-prepeater2153-1-pfield2154" value="Opettaja Testi"></td></tr>
+</tbody>
+<tfoot>
+<tr><td colspan="2" class="repeater-buttons">
+<button type="submit" class="btn btn-default btn-icon" name="prepeater2153__add" id="f-prepeater2153__add" value="Lisää rivi" title="Lisää rivi">+</button>
+</td></tr>
+</tfoot></table></div>
+</div></div>
+
+<div class="form-buttons"><input type="submit" class="btn btn-primary" name="savebtn" value="Tallenna tiedot"><input type="submit" class="btn btn-default" name="cancelbtn" value="Peruuta"></div>
+</form>
+</main>
+<script>
+  // Wilman __model-mallin mukainen uusi rivi: 4 kenttää + poistonappi viidennessä solussa.
+  const fields = ['pfield9700', 'pfield9704', 'pfield9792', 'pfield9703'];
+  function addRow() {
+    const tbody = document.getElementById('rows');
+    const count = document.getElementById('f-prepeater9700__count');
+    const n = Number(count.value) + 1;
+    count.value = String(n);
+    setTimeout(() => {
+      const tr = document.createElement('tr');
+      for (const f of fields) {
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.className = 'form-control text-field';
+        input.type = 'text';
+        input.name = `prepeater9700-${n}-${f}`;
+        input.id = `f-prepeater9700-${n}-${f}`;
+        td.appendChild(input);
+        tr.appendChild(td);
+      }
+      const td = document.createElement('td');
+      const del = document.createElement('button');
+      del.type = 'submit';
+      del.className = 'btn btn-default btn-icon';
+      del.name = `prepeater9700-${n}__remove`;
+      del.id = `f-prepeater9700-${n}__remove`;
+      del.value = '-';
+      del.title = 'Poista rivi';
+      del.textContent = '−';
+      td.appendChild(del);
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }, 30);
+  }
+  document.querySelector('form').addEventListener('submit', (ev) => ev.preventDefault());
+  document.getElementById('f-prepeater9700__add').addEventListener('click', (ev) => { ev.preventDefault(); addRow(); });
+  document.getElementById('rows').addEventListener('click', (ev) => {
+    const btn = ev.target.closest('button[id$="__remove"]');
+    if (btn) {
+      ev.preventDefault();
+      const removed = document.getElementById('f-prepeater9700__removed');
+      removed.value = (removed.value ? removed.value + ',' : '') + btn.name;
+      setTimeout(() => btn.closest('tr').remove(), 30);
+    }
+  });
+</script>
+</body>
+</html>

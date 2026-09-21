@@ -19,7 +19,8 @@
       "suoritustapa": "td:nth-child(3)",
       "suoritusajankohta": "td:nth-child(4)"
     },
-    "input_in_cell": "input, textarea, select"
+    "input_in_cell": "input, textarea, select",
+    "remove_row_button": "[id$='__remove']"
   },
   "excel_columns": {
     "osaamistavoite": "Osaamistavoite",
@@ -68,5 +69,9 @@
     "template": "Opiskelijalla on henkilökohtainen opintosuunnitelma ja hän etenee siinä omaan tahtiinsa. Mikäli opintosuunnitelmasta on kysyttävää: <Nimi>, sähköposti: <sähköpostiosoite> tai puhelimitse: <puhelinnumero>",
     "field": "osaamistavoite",
     "default": true
+  },
+  "fill": {
+    "mode": "append",
+    "key_field": "osaamistavoite"
   }
 }

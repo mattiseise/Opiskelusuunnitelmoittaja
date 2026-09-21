@@ -30,12 +30,23 @@ from PySide6.QtWidgets import (
 
 from ..config import BrowserConfig, Config, Selectors, save_config
 from ..contact import DEFAULT_TEMPLATE, TeacherContact
+from ..fillmode import FillMode
 from ..wizard import OptionalSheet, WizardConfig
 from .theme import MIDDOT
+from .update_panel import UpdatePanel
+
+TAB_NAMES = ("Opettaja", "Yleiset", "Kysely", "Lomake", "Päivitys")
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, config: Config, config_path: Path, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        config: Config,
+        config_path: Path,
+        parent: QWidget | None = None,
+        *,
+        tab: str | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Asetukset")
         self.resize(720, 560)
@@ -51,7 +62,9 @@ class SettingsDialog(QDialog):
         tabs.addTab(self._build_general(), "Yleiset")
         tabs.addTab(self._build_wizard(), "Kysely")
         tabs.addTab(self._build_selectors(), "Lomake")
-        tabs.setCurrentIndex(0)
+        self.update_panel = UpdatePanel(self)
+        tabs.addTab(self.update_panel, "Päivitys")
+        tabs.setCurrentIndex(TAB_NAMES.index(tab) if tab in TAB_NAMES else 0)
         self.tabs = tabs
 
         path_label = QLabel(f"Tallennetaan tiedostoon{MIDDOT}{config_path}")
@@ -103,6 +116,24 @@ class SettingsDialog(QDialog):
         self.separator = QCheckBox("Tyhjä välirivi välilehtien väliin")
         self.separator.setChecked(self.config.separator_row_between_sheets)
         form.addRow("", self.separator)
+        self.fill_mode = QComboBox()
+        for mode in FillMode:
+            self.fill_mode.addItem(mode.label, mode.value)
+            self.fill_mode.setItemData(
+                self.fill_mode.count() - 1, mode.description, Qt.ItemDataRole.ToolTipRole
+            )
+        self.fill_mode.setCurrentIndex(list(FillMode).index(self.config.fill_mode))
+        form.addRow("Täyttötapa oletuksena", self.fill_mode)
+        self.key_field = QComboBox()
+        for f in self.config.field_names:
+            self.key_field.addItem(f)
+        idx = self.key_field.findText(self.config.key_field)
+        self.key_field.setCurrentIndex(idx if idx >= 0 else 0)
+        self.key_field.setToolTip(
+            "Täydennä puuttuvat -tila pitää Excel-riviä jo lomakkeella olevana, kun tämän "
+            "kentän teksti löytyy lomakkeelta."
+        )
+        form.addRow("Täydennyksen tunnistekenttä", self.key_field)
         self.max_attempts = QSpinBox()
         self.max_attempts.setRange(1, 10)
         self.max_attempts.setValue(self.config.max_attempts)
@@ -185,6 +216,15 @@ class SettingsDialog(QDialog):
         form.addRow("Taulukon tbody (CSS)", self.table_body)
         self.add_row_button = QLineEdit(s.add_row_button)
         form.addRow("Lisää rivi -nappi", self.add_row_button)
+        self.remove_row_button = QLineEdit(s.remove_row_button)
+        self.remove_row_button.setPlaceholderText(
+            "esim. [id$='__remove'] – tyhjä = ylimääräiset rivit tyhjennetään korvaustilassa"
+        )
+        self.remove_row_button.setToolTip(
+            "Wilmassa vain samassa istunnossa lisätyillä riveillä on poistonappi. Tallennetut "
+            "rivit, joilta nappi puuttuu, tyhjennetään ja poistetaan Wilmassa käsin."
+        )
+        form.addRow("Poista rivi -nappi (rivin sisällä)", self.remove_row_button)
         self.input_in_cell = QLineEdit(s.input_in_cell)
         form.addRow("Kenttä solun sisällä", self.input_in_cell)
         form.addRow(QLabel("Solut ja Excel-otsikot kentittäin:"))
@@ -273,6 +313,7 @@ class SettingsDialog(QDialog):
                 add_row_button=self.add_row_button.text().strip(),
                 field_cells=field_cells,
                 input_in_cell=self.input_in_cell.text().strip(),
+                remove_row_button=self.remove_row_button.text().strip(),
             ),
             excel_columns=excel_columns,
             teacher=TeacherContact(
@@ -287,6 +328,8 @@ class SettingsDialog(QDialog):
             separator_row_between_sheets=self.separator.isChecked(),
             max_attempts=self.max_attempts.value(),
             wizard=wizard if mains else None,
+            fill_mode=FillMode.parse(self.fill_mode.currentData(), default=FillMode.APPEND),
+            key_field=self.key_field.currentText() or "osaamistavoite",
         )
 
     def save(self) -> None:

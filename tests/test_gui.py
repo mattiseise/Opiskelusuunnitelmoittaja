@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip("PySide6")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QCheckBox
 
 from opiskelusuunnitelmoittaja.config import load_config
@@ -37,8 +37,11 @@ def config_path(tmp_path: Path, excel_file: Path, monkeypatch: pytest.MonkeyPatc
     raw["teacher"] = {"name": "", "email": "", "phone": ""}  # ei yhteystietoja oletuksena
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
-    # QSettings ei saa vuotaa oikeaan käyttäjäprofiiliin
+    # QSettings ei saa vuotaa oikeaan käyttäjäprofiiliin (Windowsissa rekisteriin):
+    # ohjataan ini-tiedostoon tmp-kansiossa
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "qt"))
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path / "qt"))
     return path
 
 
@@ -154,6 +157,75 @@ def test_time_column_editable_and_applied(qtbot, config_path: Path) -> None:
     win.contact_check.setChecked(False)
     win.update_preview()
     assert win.preview.item(0, col).text() == "8/2026–5/2027"  # type: ignore[union-attr]
+
+
+def test_fill_mode_radios_default_hint_and_persistence(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.fillmode import FillMode
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert [rb.text() for rb in win.mode_buttons.values()] == [
+        "Lisää loppuun",
+        "Korvaa olemassa oleva opintosuunnitelma",
+        "Täydennä puuttuvat",
+    ]
+    assert win.selected_fill_mode() is FillMode.APPEND  # config.jsonin oletus
+    assert win.mode_hint.text() == FillMode.APPEND.description
+
+    win.mode_buttons[FillMode.COMPLETE].setChecked(True)
+    assert win.selected_fill_mode() is FillMode.COMPLETE
+    assert win.mode_hint.text() == FillMode.COMPLETE.description
+    assert win.settings.value("fill_mode") == "complete"
+
+    # valinta säilyy uuteen ikkunaan (QSettings) ja voittaa configin oletuksen
+    win2 = MainWindow(config_path)
+    qtbot.addWidget(win2)
+    assert win2.selected_fill_mode() is FillMode.COMPLETE
+
+
+def test_open_excel_button(qtbot, config_path: Path, monkeypatch, tmp_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert win.btn_open_excel.text() == "Avaa Excel"
+    opened: list[Path] = []
+    monkeypatch.setattr(win, "_open_path", opened.append)
+    win.open_excel()
+    assert opened == [win.excel_path]
+
+    # puuttuva tiedosto → ilmoitus, ei avausta
+    win.excel_path = tmp_path / "ei-ole.xlsx"
+    shown: list[str] = []
+    monkeypatch.setattr(
+        "opiskelusuunnitelmoittaja.gui.main_window.QMessageBox.information",
+        lambda *a, **k: shown.append(a[1]),
+    )
+    win.open_excel()
+    assert len(opened) == 1  # ei uutta avausta
+    assert shown and "Excel ei löydy" in shown[0]
+
+
+def test_settings_dialog_fill_mode_roundtrip(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.fillmode import FillMode
+
+    config = load_config(config_path)
+    dialog = SettingsDialog(config, config_path)
+    qtbot.addWidget(dialog)
+    assert dialog.fill_mode.currentData() == "append"
+    dialog.fill_mode.setCurrentIndex(list(FillMode).index(FillMode.REPLACE))
+    dialog.remove_row_button.setText("[id$='__del']")
+    dialog.key_field.setCurrentText("suoritustapa")
+    dialog.save()
+
+    saved = load_config(config_path)
+    assert saved.fill_mode is FillMode.REPLACE
+    assert saved.selectors.remove_row_button == "[id$='__del']"
+    assert saved.key_field == "suoritustapa"
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.settings.remove("fill_mode")
+    win.reload_config()
+    assert win.selected_fill_mode() is FillMode.REPLACE
 
 
 def test_settings_dialog_opens_teacher_tab_first(qtbot, config_path: Path) -> None:

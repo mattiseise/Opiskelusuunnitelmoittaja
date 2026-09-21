@@ -135,13 +135,44 @@ git push origin v2.1.0
 
    ![Esikatselu muokattuna](docs/kuvat/02-esikatselu-muokattu.png)
 
-5. Paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin
+5. Valitse **täyttötapa** kohdassa 4 (ks. [Täyttötapa](#täyttötapa)): *Lisää loppuun*,
+   *Korvaa olemassa oleva opintosuunnitelma* tai *Täydennä puuttuvat*. Valinta muistetaan
+   seuraavaan kertaan.
+6. Paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin
    jälkeen.
 
    ![Täyttö käynnissä](docs/kuvat/03-taytto.png)
-6. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
+7. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
+
+Kohdan 2 *Avaa Excel* avaa lähdetaulukon Excelissä (tai .xlsx-tiedostojen oletusohjelmassa).
+Tallenna muutokset Excelissä ja paina *Lataa uudelleen*, niin esikatselu päivittyy.
 
 Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset*-ikkunassa.
+
+### Täyttötapa
+
+Lomakkeella voi olla jo opintosuunnitelma. Täyttötapa määrää, mitä sen riveille tehdään:
+
+| Täyttötapa                                   | Mitä tapahtuu                                                                                                                                                                                                              |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Lisää loppuun** (oletus)                   | Nykyisiin riveihin ei kosketa. Uudet rivit tulevat perään; taulukon valmis tyhjä rivi käytetään ensin.                                                                                                                      |
+| **Korvaa olemassa oleva opintosuunnitelma**  | Nykyiset rivit kirjoitetaan yli järjestyksessä, ja loput lisätään. Jos vanhoja rivejä on enemmän kuin uusia, ylimääräiset poistetaan rivin poistonapilla (`selectors.remove_row_button`, oletus `[id$='__remove']`). Wilmassa nappi on vain samassa istunnossa lisätyillä riveillä; tallennetut rivit tyhjennetään, ja ne poistetaan Wilmassa käsin. |
+| **Täydennä puuttuvat**                       | Lomakkeelta luetaan nykyiset rivit. Excel-rivi ohitetaan, jos sen *Osaamistavoite* on jo lomakkeella. Vertailu ohittaa kirjainkoon, välilyönnit ja perään kirjoitetun laajuuden ("Taide ja luova ilmaisu 1osp" = "Taide ja luova ilmaisu"), ja hyväksyy myös alkuosan vastaavuuden, kun teksti on vähintään 8 merkkiä. Vain puuttuvat lisätään perään, nykyisiin ei kosketa. Loki ja yhteenveto kertovat ohitetut. |
+
+Tyhjällä lomakkeella kaikki kolme tuottavat saman tuloksen. Korvaustila vahvistetaan
+erikseen ennen täyttöä. Oletustavan, täydennyksen tunnistekentän (`fill.key_field`, oletus
+`osaamistavoite`) ja poistonapin valitsimen voi muuttaa *Asetukset → Yleiset* ja *Lomake*.
+Komentorivillä täyttötapa annetaan lipulla `--lisaa`, `--korvaa` tai `--taydenna`; ohjattu
+kysely kysyy sen, jos lippua ei anneta.
+
+### Päivitys
+
+*Asetukset → Päivitys* (tai *Ohje → Tarkista päivitykset…*) näyttää nykyisen version ja
+tarkistaa uusimman. Kehitysversiossa (git-klooni) **Päivitä** ajaa repokansiossa
+`git pull --ff-only` ja `uv sync --extra gui` (jos `uv` on PATHissa tai ympäristömuuttujassa
+`SUUNNITELMOITTAJA_UV`) ja tarjoaa uudelleenkäynnistystä. Paikalliset muutokset varoitetaan
+etukäteen; ristiriita keskeyttää päivityksen koskematta tiedostoihin. Paketoitu sovellus
+vertaa versionumeroa GitHubin uusimpaan Releaseen ja avaa lataussivun.
 
 **Opettajan yhteystiedot alimmaksi riviksi.** Asetukset avautuu *Opettaja*-välilehteen: nimi,
 sähköposti ja puhelin.
@@ -168,7 +199,8 @@ Kuvakevaihtoehdot ovat kansiossa `packaging/icon-variants/`.
 Työkalu etsii avoimista Chromen välilehdistä sen, jolla lomaketaulukko on. Jos taulukossa on
 valmiina tyhjä rivi (Wilmassa on), ensimmäinen Excel-rivi täytetään siihen; loput rivit lisätään
 lisäysnapilla. Sivun muihin taulukoihin (esim. Pvm & päivittäjä) ei kosketa. Välilehtien väliin
-lisätään tyhjä välirivi (`--no-separator` poistaa sen). Lopuksi tulostuu yhteenveto; virheet
+lisätään tyhjä välirivi (`--no-separator` poistaa sen). Täyttötapa: `--lisaa` (oletus),
+`--korvaa` tai `--taydenna` (ks. [Täyttötapa](#täyttötapa)). Lopuksi tulostuu yhteenveto; virheet
 kirjataan lokiin `logs/app.log`. `-v` näyttää etenemislokin konsolissa, `--debug` yksityiskohdat,
 `uv run suunnitelmoittaja sheets` listaa Excelin välilehdet numeroituina.
 
@@ -231,6 +263,7 @@ Kaikki avaimet ovat valinnaisia; puuttuvat täydennetään oletuksilla.
   "selectors": {
     "table_body": "table:has(th:has-text(\"Osaamistavoite\")) tbody",  // vain opintotaulukko
     "add_row_button": "[id$='__add']",
+    "remove_row_button": "[id$='__remove']",  // poistonappi rivin sisällä (korvaustila); tyhjä = tyhjennä aina
     "field_cells": {
       "osaamistavoite": "td:nth-child(1)",
       "laajuus": "td:nth-child(2)",
@@ -242,6 +275,7 @@ Kaikki avaimet ovat valinnaisia; puuttuvat täydennetään oletuksilla.
   "excel_columns": { "osaamistavoite": "Osaamistavoite", "...": "..." },
   "empty_value": " ",
   "separator_row_between_sheets": true,
+  "fill": { "mode": "append", "key_field": "osaamistavoite" },  // append | replace | complete
   "retry": { "max_attempts": 3, "delay_s": 1.0 },
   "logging": { "level": "INFO" }
 }

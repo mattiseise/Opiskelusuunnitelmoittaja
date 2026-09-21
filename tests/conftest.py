@@ -43,6 +43,12 @@ def lomake_url() -> str:
     return (FIXTURES / "lomake.html").resolve().as_uri()
 
 
+@pytest.fixture
+def wilma_url() -> str:
+    """Wilman lomakkeen rakennekopio, jossa on neljä tallennettua riviä ilman poistonappia."""
+    return (FIXTURES / "wilma-lomake.html").resolve().as_uri()
+
+
 @pytest.fixture(scope="session")
 def browser_type_launch_args(browser_type_launch_args: dict[str, object]) -> dict[str, object]:
     """Salli Chromium-binäärin osoittaminen ympäristömuuttujalla (CI, valmis selain)."""

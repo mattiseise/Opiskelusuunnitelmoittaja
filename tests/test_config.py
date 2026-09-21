@@ -71,4 +71,31 @@ def test_launch_command_mentions_port_and_profile() -> None:
     cfg = BrowserConfig(user_data_dir="/tmp/profiili", chrome_path="/x/chrome")
     cmd = cfg.launch_command()
     assert "--remote-debugging-port=9222" in cmd
-    assert "/tmp/profiili" in cmd
+    assert str(Path("/tmp/profiili")) in cmd  # Windowsissa polku tulostuu kenoviivoilla
+
+
+def test_fill_section_parsed_and_roundtripped() -> None:
+    from opiskelusuunnitelmoittaja.config import config_to_dict
+    from opiskelusuunnitelmoittaja.fillmode import FillMode
+
+    assert Config().fill_mode is FillMode.APPEND
+    assert Config().resolved_key_field == "osaamistavoite"
+    cfg = config_from_dict(
+        {
+            "fill": {"mode": "korvaa", "key_field": "laajuus"},
+            "selectors": {"remove_row_button": "[id$='__del']"},
+        }
+    )
+    assert cfg.fill_mode is FillMode.REPLACE
+    assert cfg.key_field == "laajuus"
+    assert cfg.selectors.remove_row_button == "[id$='__del']"
+    # tuntematon arvo → oletus, ei kaatumista
+    assert config_from_dict({"fill": {"mode": "höpö"}}).fill_mode is FillMode.APPEND
+    # tuntematon avainkenttä → ensimmäinen kenttä
+    assert config_from_dict({"fill": {"key_field": "olematon"}}).resolved_key_field == (
+        "osaamistavoite"
+    )
+    data = config_to_dict(cfg)
+    assert data["fill"] == {"mode": "replace", "key_field": "laajuus"}
+    assert data["selectors"]["remove_row_button"] == "[id$='__del']"
+    assert config_from_dict(data).fill_mode is FillMode.REPLACE

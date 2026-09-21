@@ -41,6 +41,7 @@ from ..config import Config, ConfigError, load_config
 from ..contact import QUESTION as CONTACT_QUESTION
 from ..excel import ExcelError, PlanRow, Sheet, list_sheets, read_sheet
 from ..filler import Summary
+from ..fillmode import FillMode
 from ..logsetup import setup_logging
 from . import theme
 from .settings_dialog import SettingsDialog
@@ -57,7 +58,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.config_path = config_path
         self.config: Config = Config()
-        self.settings = QSettings("Seise", "OpintosuunnitelmanTayttaja")
+        # defaultFormat() kunnioittaa QSettings.setDefaultFormat-kutsua (testit ohjaavat
+        # asetukset ini-tiedostoon); kaksiargumenttinen muoto menisi Windowsissa aina rekisteriin.
+        self.settings = QSettings(
+            QSettings.defaultFormat(),
+            QSettings.Scope.UserScope,
+            "Seise",
+            "OpintosuunnitelmanTayttaja",
+        )
         self.worker: FillWorker | None = None
         self._available_sheets: list[str] = []
         self._preview_sheets: list[Sheet] = []
@@ -100,6 +108,9 @@ class MainWindow(QMainWindow):
         menu.addAction(act_quit)
 
         help_menu = self.menuBar().addMenu("Ohje")
+        act_update = QAction("Tarkista päivitykset…", self)
+        act_update.triggered.connect(lambda: self.open_settings(tab="Päivitys"))
+        help_menu.addAction(act_update)
         act_about = QAction("Tietoja", self)
         act_about.triggered.connect(self.show_about)
         help_menu.addAction(act_about)
@@ -190,6 +201,13 @@ class MainWindow(QMainWindow):
         excel_caps.setSpacing(6)
         excel_caps.addWidget(_label("LÄHDE", "caps"))
         excel_caps.addStretch()
+        self.btn_open_excel = QPushButton("Avaa Excel")
+        self.btn_open_excel.setProperty("variant", "link")
+        self.btn_open_excel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_open_excel.setToolTip("Avaa lähde-Excel Excelissä (tai oletusohjelmassa)")
+        self.btn_open_excel.clicked.connect(self.open_excel)
+        excel_caps.addWidget(self.btn_open_excel)
+        excel_caps.addWidget(_label("·", "muted"))
         btn_browse = QPushButton("Vaihda")
         btn_browse.setProperty("variant", "link")
         btn_browse.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -319,6 +337,28 @@ class MainWindow(QMainWindow):
 
         # 4 · Täyttö
         right_layout.addLayout(self._step_header("4", "Täyttö"))
+        right_layout.addWidget(_label("TÄYTTÖTAPA", "caps"))
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(18)
+        mode_row.setContentsMargins(0, 4, 0, 0)
+        self.mode_group = QButtonGroup(self)
+        self.mode_group.setExclusive(True)
+        self.mode_buttons: dict[FillMode, QRadioButton] = {}
+        for mode in FillMode:
+            rb = QRadioButton(mode.label)
+            rb.setProperty("mode", mode.value)
+            rb.setToolTip(mode.description)
+            rb.toggled.connect(self._on_mode_changed)
+            self.mode_group.addButton(rb)
+            self.mode_buttons[mode] = rb
+            mode_row.addWidget(rb)
+        mode_row.addStretch()
+        right_layout.addLayout(mode_row)
+        self.mode_hint = _label("", "muted")
+        self.mode_hint.setWordWrap(True)
+        self.mode_hint.setContentsMargins(0, 4, 0, 14)
+        right_layout.addWidget(self.mode_hint)
+        # oletusvalinta asetetaan reload_configissa (QSettings → config.fill_mode)
         actions = QHBoxLayout()
         actions.setSpacing(12)
         self.btn_fill = QPushButton("Täytä lomake")
@@ -388,6 +428,8 @@ class MainWindow(QMainWindow):
         self.excel_edit.setText(_short_path(self.excel_path))
         self.excel_edit.setToolTip(str(self.excel_path))
         self.separator_check.setChecked(self.config.separator_row_between_sheets)
+        saved_mode = str(self.settings.value("fill_mode", "", type=str) or "")
+        self.set_fill_mode(FillMode.parse(saved_mode, default=self.config.fill_mode))
         teacher = self.config.teacher
         self.contact_check.blockSignals(True)
         self.contact_check.setEnabled(teacher.is_configured())
@@ -463,6 +505,22 @@ class MainWindow(QMainWindow):
         self.update_preview()
 
     # ------------------------------------------------------------------ valinnat
+
+    def selected_fill_mode(self) -> FillMode:
+        checked = self.mode_group.checkedButton()
+        if checked is None:
+            return self.config.fill_mode
+        return FillMode.parse(checked.property("mode"), default=self.config.fill_mode)
+
+    def set_fill_mode(self, mode: FillMode) -> None:
+        self.mode_buttons[mode].setChecked(True)
+
+    def _on_mode_changed(self, checked: bool) -> None:
+        if not checked:
+            return
+        mode = self.selected_fill_mode()
+        self.mode_hint.setText(mode.description)
+        self.settings.setValue("fill_mode", mode.value)
 
     def selected_sheet_names(self) -> list[str]:
         if self.manual_toggle.isChecked():
@@ -646,8 +704,20 @@ class MainWindow(QMainWindow):
             self.settings.setValue("excel_path", path)
             self.reload_excel()
 
-    def open_settings(self) -> None:
-        dialog = SettingsDialog(self.config, self.config_path, self)
+    def open_excel(self) -> None:
+        """Avaa lähde-Excel käyttöjärjestelmän oletusohjelmassa (Excel)."""
+        if not self.excel_path.exists():
+            QMessageBox.information(
+                self, "Excel ei löydy", f"Tiedostoa ei ole:\n{self.excel_path}\n\nValitse Vaihda."
+            )
+            return
+        self._open_path(self.excel_path)
+        self.statusBar().showMessage(
+            f"Avattu {self.excel_path.name}. Tallenna Excel ja paina Lataa uudelleen.", 6000
+        )
+
+    def open_settings(self, tab: str | None = None) -> None:
+        dialog = SettingsDialog(self.config, self.config_path, self, tab=tab)
         if dialog.exec():
             self.reload_config()
             self.statusBar().showMessage("Asetukset tallennettu", 3000)
@@ -695,12 +765,22 @@ class MainWindow(QMainWindow):
                 "Käynnistä Chrome ensin ja avaa lomakesivu siihen ikkunaan.",
             )
             return
-        answer = QMessageBox.question(
-            self,
-            "Täytetäänkö lomake?",
+        mode = self.selected_fill_mode()
+        text = (
             f"Täytetään {total} riviä välilehdiltä:\n{', '.join(s.name for s in sheets)}\n\n"
-            "Varmista, että lomakesivu on auki Chromessa.",
+            f"Täyttötapa: {mode.label}.\n{mode.description}\n\n"
+            "Varmista, että lomakesivu on auki Chromessa."
         )
+        if mode is FillMode.REPLACE:
+            answer = QMessageBox.warning(
+                self,
+                "Korvataanko opintosuunnitelma?",
+                text + "\n\nLomakkeella nyt olevat rivit kirjoitetaan yli.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+        else:
+            answer = QMessageBox.question(self, "Täytetäänkö lomake?", text)
         if answer != QMessageBox.StandardButton.Yes:
             return
 
@@ -711,7 +791,7 @@ class MainWindow(QMainWindow):
         self.progress.setMaximum(total)
         self.progress.setValue(0)
         self.progress_label.setText(f"0 / {total} riviä")
-        self.worker = FillWorker(config, sheets)
+        self.worker = FillWorker(config, sheets, mode=mode)
         self.worker.progress.connect(self._on_progress)
         self.worker.finished_ok.connect(self._on_finished)
         self.worker.failed.connect(self._on_failed)
@@ -730,6 +810,8 @@ class MainWindow(QMainWindow):
         self.group_main.setEnabled(not running and not self.manual_toggle.isChecked())
         self.group_optional.setEnabled(not running and not self.manual_toggle.isChecked())
         self.manual_list.setEnabled(not running)
+        for rb in self.mode_buttons.values():
+            rb.setEnabled(not running)
         self.statusBar().showMessage("Täytetään…" if running else "Valmis")
 
     @Slot(int, int, str)
@@ -744,11 +826,23 @@ class MainWindow(QMainWindow):
     def _on_finished(self, summary: Summary) -> None:
         lines = [
             f"{s.sheet_name}: {s.successful_rows}/{s.total_rows} riviä ({s.success_rate:.0f} %)"
+            + (f", ohitettu {s.skipped_rows} (jo lomakkeella)" if s.skipped_rows else "")
             for s in summary.sheets
         ]
-        text = "\n".join(lines) + (
-            f"\n\nYhteensä {summary.successful_rows}/{summary.total_rows} riviä onnistui."
+        text = (
+            f"Täyttötapa: {summary.mode.label}\n\n"
+            + "\n".join(lines)
+            + (f"\n\nYhteensä {summary.successful_rows}/{summary.total_rows} riviä onnistui.")
         )
+        if summary.skipped_rows:
+            text += f"\nOhitettu {summary.skipped_rows} riviä, jotka olivat jo lomakkeella."
+        if summary.removed_rows:
+            text += f"\nPoistettu {summary.removed_rows} ylimääräistä riviä."
+        if summary.cleared_rows:
+            text += (
+                f"\nTyhjennetty {summary.cleared_rows} ylimääräistä riviä. "
+                "Poista ne Wilmassa käsin."
+            )
         if summary.failed_rows:
             text += f"\nVirheitä {summary.total_errors}. Katso loki: {self.config.log_file}"
             QMessageBox.warning(self, "Täyttö valmis, virheitä", text)

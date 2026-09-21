@@ -10,6 +10,7 @@ from playwright.sync_api import Page
 from opiskelusuunnitelmoittaja.config import Config, Selectors
 from opiskelusuunnitelmoittaja.excel import PlanRow, Sheet
 from opiskelusuunnitelmoittaja.filler import FormFiller
+from opiskelusuunnitelmoittaja.fillmode import FillMode
 
 # Sama valitsin kuin repon config.jsonissa: sivulla on kaksi taulukkoa, osutaan oikeaan.
 CFG = replace(
@@ -129,3 +130,246 @@ def test_progress_callback_is_called(page: Page, lomake_url: str) -> None:
         Sheet("A", [_row("A1", "1"), _row("A2", "2")])
     )
     assert messages == ["  A: rivi 1/2", "  A: rivi 2/2"]
+
+
+# --- täyttötavat: korvaa / täydennä --------------------------------------------
+
+
+def _prefill(page: Page, *rows: PlanRow) -> None:
+    """Simuloi lomakkeella jo olevaa opintosuunnitelmaa (lisäystilassa, ilman väliriviä)."""
+    cfg = replace(CFG, separator_row_between_sheets=False)
+    FormFiller(page, cfg).process_sheets([Sheet("Vanha", list(rows))])
+
+
+def test_replace_overwrites_existing_rows_in_order_and_adds_more(
+    page: Page, lomake_url: str
+) -> None:
+    page.goto(lomake_url)
+    _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"))
+    assert len(_table_values(page)) == 2
+
+    cfg = replace(CFG, separator_row_between_sheets=False)
+    summary = FormFiller(page, cfg, mode=FillMode.REPLACE).process_sheets(
+        [Sheet("A", [_row("Uusi 1", "10"), _row("Uusi 2", "20"), _row("Uusi 3", "30")])]
+    )
+    assert summary.mode is FillMode.REPLACE
+    assert summary.successful_rows == 3
+    assert summary.removed_rows == 0 and summary.cleared_rows == 0
+    values = _table_values(page)
+    assert [v[0] for v in values] == ["Uusi 1", "Uusi 2", "Uusi 3"]
+    assert values[0][1] == "10"
+
+
+def test_replace_clears_leftover_rows_when_no_remove_button(
+    page: Page, lomake_url: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    page.goto(lomake_url)
+    _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"), _row("Vanha 3", "3"))
+
+    cfg = replace(CFG, selectors=replace(CFG.selectors, remove_row_button=""))
+    with caplog.at_level("WARNING", logger="suunnitelmoittaja.filler"):
+        summary = FormFiller(page, cfg, mode=FillMode.REPLACE).process_sheets(
+            [Sheet("A", [_row("Uusi 1", "10")])]
+        )
+    assert summary.cleared_rows == 2
+    assert summary.removed_rows == 0
+    values = _table_values(page)
+    assert len(values) == 3  # rivejä ei voitu poistaa → tyhjennetty
+    assert values[0][0] == "Uusi 1"
+    assert values[1] == ["", "", "", ""]
+    assert values[2] == ["", "", "", ""]
+    assert any("Tyhjennettiin 2" in r.message for r in caplog.records)
+
+
+def test_replace_removes_leftover_rows_with_remove_button(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"), _row("Vanha 3", "3"))
+
+    # oletusvalitsin [id$='__remove'] – lisätyillä riveillä 2 ja 3 on nappi, valmiilla rivillä 1 ei
+    summary = FormFiller(page, CFG, mode=FillMode.REPLACE).process_sheets(
+        [Sheet("A", [_row("Uusi 1", "10")])]
+    )
+    assert summary.removed_rows == 2
+    assert summary.cleared_rows == 0
+    assert _table_values(page) == [["Uusi 1", "10", "Joustava", " "]]
+
+
+def test_replace_mixed_saved_and_added_rows(page: Page, lomake_url: str) -> None:
+    """Valmis rivi ilman nappia tyhjennetään, lisätyt rivit poistetaan."""
+    page.goto(lomake_url)
+    _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"), _row("Vanha 3", "3"))
+    # kirjoitetaan yli 0 riviä → kaikki kolme ovat ylimääräisiä
+    summary = FormFiller(page, CFG, mode=FillMode.REPLACE).process_sheets([Sheet("A", [])])
+    assert summary.removed_rows == 2
+    assert summary.cleared_rows == 1
+    assert _table_values(page) == [["", "", "", ""]]
+
+
+def test_replace_separator_reuses_existing_row(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"), _row("Vanha 3", "3"))
+
+    summary = FormFiller(page, CFG, mode=FillMode.REPLACE).process_sheets(
+        [Sheet("A", [_row("A1", "1")]), Sheet("B", [_row("B1", "2")])]
+    )
+    assert summary.successful_rows == 2
+    values = _table_values(page)
+    assert len(values) == 3  # A1, välirivi (vanha rivi tyhjennettynä), B1 – ei ylimääräisiä
+    assert values[0][0] == "A1"
+    assert values[1] == ["", "", "", ""]
+    assert values[2][0] == "B1"
+    assert summary.cleared_rows == 0
+
+
+def test_replace_on_empty_form_behaves_like_append(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    summary = FormFiller(page, CFG, mode=FillMode.REPLACE).process_sheets(
+        [Sheet("A", [_row("A1", "1"), _row("A2", "2")])]
+    )
+    assert summary.successful_rows == 2
+    assert [v[0] for v in _table_values(page)] == ["A1", "A2"]
+
+
+def test_complete_skips_rows_already_on_form(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    # lomakkeella: Ohjelmointi eri laajuudella, Tietoturva eri kirjainkoolla ja välilyönneillä
+    _prefill(page, _row("Ohjelmointi", "99", "Vanha tapa"), _row("  tietoturva ", "30"))
+
+    cfg = replace(CFG, separator_row_between_sheets=False)
+    messages: list[str] = []
+    filler = FormFiller(page, cfg, mode=FillMode.COMPLETE, progress=messages.append)
+    summary = filler.process_sheets(
+        [
+            Sheet("A", [_row("Ohjelmointi", "45"), _row("Tietoturva", "30")]),
+            Sheet("B", [_row("Uusi tavoite", "5"), _row("Uusi tavoite", "5")]),  # duplikaatti
+        ]
+    )
+    assert summary.mode is FillMode.COMPLETE
+    assert summary.skipped_rows == 3
+    assert summary.successful_rows == 1
+    assert summary.total_rows == 1
+    a = next(s for s in summary.sheets if s.sheet_name == "A")
+    assert a.skipped == ["Ohjelmointi", "Tietoturva"]
+    assert a.total_rows == 0
+    values = _table_values(page)
+    assert len(values) == 3
+    assert values[0] == ["Ohjelmointi", "99", "Vanha tapa", " "]  # ei koskettu
+    assert values[2][0] == "Uusi tavoite"
+    assert any("on jo lomakkeella" in m for m in messages)
+
+
+def test_complete_adds_no_separator_for_fully_present_sheet(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    _prefill(page, _row("A1", "1"))
+
+    summary = FormFiller(page, CFG, mode=FillMode.COMPLETE).process_sheets(
+        [Sheet("A", [_row("A1", "1")]), Sheet("B", [_row("B1", "2")])]
+    )
+    assert summary.skipped_rows == 1
+    assert summary.successful_rows == 1
+    values = _table_values(page)
+    assert [v[0] for v in values] == ["A1", "B1"]  # ei väliriviä, koska A ei tuonut rivejä
+
+
+def test_complete_on_empty_form_fills_everything(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    summary = FormFiller(page, CFG, mode=FillMode.COMPLETE).process_sheets(
+        [Sheet("A", [_row("A1", "1"), _row("A2", "2")])]
+    )
+    assert summary.skipped_rows == 0
+    assert summary.successful_rows == 2
+    assert [v[0] for v in _table_values(page)] == ["A1", "A2"]
+
+
+def test_mode_defaults_from_config(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    cfg = replace(CFG, fill_mode=FillMode.COMPLETE)
+    assert FormFiller(page, cfg).mode is FillMode.COMPLETE
+    assert FormFiller(page, cfg, mode=FillMode.REPLACE).mode is FillMode.REPLACE
+    dry = FormFiller(None, cfg, dry_run=True, mode=FillMode.REPLACE)
+    assert dry.process_sheets([Sheet("A", [_row("A1", "1")])]).successful_rows == 1
+
+
+# --- Wilman lomakkeen rakennekopio -------------------------------------------------
+
+
+def test_wilma_append_adds_rows_with_remove_button(page: Page, wilma_url: str) -> None:
+    page.goto(wilma_url)
+    cfg = replace(CFG, separator_row_between_sheets=False)
+    summary = FormFiller(page, cfg).process_sheets([Sheet("A", [_row("Uusi", "5")])])
+    assert summary.successful_rows == 1
+    values = _table_values(page)
+    assert len(values) == 5  # 4 tallennettua + 1 uusi, viimeinen rivi ei ollut tyhjä
+    assert values[4] == ["Uusi", "5", "Joustava", " "]
+    assert page.locator("#rows tr").nth(4).locator("[id$='__remove']").count() == 1
+    assert page.locator("#rows tr").nth(0).locator("[id$='__remove']").count() == 0
+    assert _table_values(page, "#meta-rows") == [["14.4.2025", "Opettaja Testi"]]
+
+
+def test_wilma_replace_clears_saved_rows_and_removes_added(page: Page, wilma_url: str) -> None:
+    page.goto(wilma_url)
+    # opettaja on lisännyt yhden rivin tässä istunnossa (napillinen), sitten korvaa 2 rivillä
+    FormFiller(page, replace(CFG, separator_row_between_sheets=False)).process_sheets(
+        [Sheet("Lisätty", [_row("Kesken jäänyt", "1")])]
+    )
+    assert len(_table_values(page)) == 5
+
+    summary = FormFiller(page, CFG, mode=FillMode.REPLACE).process_sheets(
+        [Sheet("A", [_row("Uusi 1", "10"), _row("Uusi 2", "20")])]
+    )
+    assert summary.successful_rows == 2
+    assert summary.removed_rows == 1  # lisätty rivi poistettiin napista
+    assert summary.cleared_rows == 2  # tallennetut rivit 3 ja 4 tyhjennettiin
+    values = _table_values(page)
+    assert [v[0] for v in values] == ["Uusi 1", "Uusi 2", "", ""]
+    assert values[2] == ["", "", "", ""]
+
+
+def test_wilma_complete_matches_osp_suffix_and_prefix(page: Page, wilma_url: str) -> None:
+    page.goto(wilma_url)
+    cfg = replace(CFG, separator_row_between_sheets=False)
+    summary = FormFiller(page, cfg, mode=FillMode.COMPLETE).process_sheets(
+        [
+            Sheet(
+                "YTO",
+                [
+                    _row("Taide ja luova ilmaisu", "1"),  # lomakkeella "… 1osp"
+                    _row("Äidinkieli 4", "1"),  # lomakkeella "Äidinkieli 4 1osp"
+                    _row("Äidinkieli 3", "1"),  # puuttuu
+                    _row("Terveystieto", "1"),  # täsmälleen
+                    _row("Fysiikka", "1"),  # puuttuu (lyhyt, ei alkuosavertailua)
+                    _row("Ohjelmoinnin perusteet, verkkokurssi", "15"),  # alkuosa vastaa
+                ],
+            )
+        ]
+    )
+    assert summary.skipped_rows == 4
+    assert summary.sheets[0].skipped == [
+        "Taide ja luova ilmaisu",
+        "Äidinkieli 4",
+        "Terveystieto",
+        "Ohjelmoinnin perusteet, verkkokurssi",
+    ]
+    assert summary.successful_rows == 2
+    values = _table_values(page)
+    assert [v[0] for v in values[4:]] == ["Äidinkieli 3", "Fysiikka"]
+    assert values[0][0] == "Ohjelmoinnin perusteet"  # ei koskettu
+
+
+def test_norm_and_find_match() -> None:
+    from opiskelusuunnitelmoittaja.filler import _find_match, _norm
+
+    assert _norm("Taide ja luova ilmaisu 1osp") == "taide ja luova ilmaisu"
+    assert _norm("Terveystieto (1 osp)") == "terveystieto"
+    assert _norm("  Äidinkieli   4 1 osp ") == "äidinkieli 4"
+    assert _norm("Matematiikka 2,5 osp:") == "matematiikka"
+    assert _norm("Ohjelmointi 2") == "ohjelmointi 2"  # numero ilman osp:tä säilyy
+    existing = ["Fysiikka 1osp", "Fysiikka 2 1osp", "Ohjelmoinnin perusteet"]
+    assert _find_match("fysiikka", existing) == "Fysiikka 1osp"
+    assert _find_match("Fysiikka 2", existing) == "Fysiikka 2 1osp"
+    assert _find_match("Fysiikka 3", existing) is None
+    assert _find_match("Ohjelmoinnin perusteet, verkkokurssi", existing) == (
+        "Ohjelmoinnin perusteet"
+    )
+    assert _find_match("Ohjelmointi", existing) is None  # alkuosa, mutta eri sana
+    assert _find_match("", existing) is None

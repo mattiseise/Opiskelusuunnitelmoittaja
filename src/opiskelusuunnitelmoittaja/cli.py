@@ -4,6 +4,8 @@ suunnitelmoittaja chrome            # käynnistä Chrome etädebuggauksella
 suunnitelmoittaja sheets            # listaa Excelin välilehdet
 suunnitelmoittaja fill 1,3          # täytä valitut välilehdet
 suunnitelmoittaja fill --dry-run    # näytä mitä täytettäisiin
+suunnitelmoittaja fill 1 --korvaa   # korvaa lomakkeella jo oleva opintosuunnitelma
+suunnitelmoittaja fill 1 --taydenna # lisää vain rivit, joita lomakkeella ei vielä ole
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from .config import Config, ConfigError, load_config
 from .contact import QUESTION as CONTACT_QUESTION
 from .excel import ExcelError, Sheet, list_sheets, read_sheet, resolve_sheet_selection
 from .filler import FormFiller, Summary
+from .fillmode import FillMode
 from .logsetup import setup_logging
 from .paths import ensure_user_files, is_frozen, user_config_path
 from .wizard import WizardCancelled, ask_yes_no, run_wizard
@@ -62,6 +65,29 @@ def build_parser() -> argparse.ArgumentParser:
     fill.add_argument("--yes", "-y", action="store_true", help="älä pyydä vahvistusta")
     fill.add_argument(
         "--no-separator", action="store_true", help="ei tyhjää väliriviä välilehtien väliin"
+    )
+    mode = fill.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--lisaa",
+        dest="mode",
+        action="store_const",
+        const=FillMode.APPEND,
+        default=None,
+        help="lisää rivit lomakkeen nykyisten rivien perään (oletus: asetukset → fill.mode)",
+    )
+    mode.add_argument(
+        "--korvaa",
+        dest="mode",
+        action="store_const",
+        const=FillMode.REPLACE,
+        help="korvaa lomakkeella jo oleva opintosuunnitelma (rivit kirjoitetaan yli)",
+    )
+    mode.add_argument(
+        "--taydenna",
+        dest="mode",
+        action="store_const",
+        const=FillMode.COMPLETE,
+        help="täydennä puuttuvat: lisää vain rivit, joiden osaamistavoitetta ei vielä ole",
     )
     contact = fill.add_mutually_exclusive_group()
     contact.add_argument(
@@ -111,6 +137,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     dry_run=args.dry_run,
                     assume_yes=args.yes,
                     contact=args.contact,
+                    mode=args.mode,
                 )
     except (ExcelError, BrowserError, ValueError) as exc:
         print(f"\nVirhe: {exc}", file=sys.stderr)
@@ -155,6 +182,7 @@ def cmd_fill(
     dry_run: bool,
     assume_yes: bool,
     contact: bool | None = None,
+    mode: FillMode | None = None,
 ) -> int:
     available = list_sheets(config.excel_file)
     interactive = selection is None
@@ -189,8 +217,11 @@ def cmd_fill(
             chosen = [*chosen, contact_sheet.name]
     elif contact:
         print("Huom. opettajan yhteystietoja ei ole asetuksissa (teacher), riviä ei lisätä.")
+    if mode is None:
+        mode = _ask_mode(config.fill_mode) if interactive else config.fill_mode
     total = sum(len(s.rows) for s in sheets)
     print(f"\nTäytetään {total} riviä välilehdiltä: {', '.join(chosen)}")
+    print(f"Täyttötapa: {mode.label}")
 
     if dry_run:
         for sheet in sheets:
@@ -201,6 +232,8 @@ def cmd_fill(
 
     if not assume_yes:
         print("Varmista, että lomakesivu on auki Chromessa.")
+        if mode is FillMode.REPLACE:
+            print("HUOM. Lomakkeella nyt olevat rivit kirjoitetaan yli.")
         if input("Jatketaanko? [K/e] ").strip().lower() in {"e", "ei", "n", "no"}:
             print("Peruttu.")
             return 0
@@ -208,7 +241,7 @@ def cmd_fill(
     with connect(config.browser) as browser:
         page = find_form_page(browser, config.browser, config.selectors.table_body)
         print(f"Lomakesivu: {page.title() or page.url}")
-        filler = FormFiller(page, config, progress=lambda m: print(m, flush=True))
+        filler = FormFiller(page, config, mode=mode, progress=lambda m: print(m, flush=True))
         summary = filler.process_sheets(sheets)
 
     print_summary(summary, config.log_file)
@@ -226,13 +259,36 @@ def _ask_selection(available: list[str]) -> str | None:
     return answer or None
 
 
+def _ask_mode(default: FillMode) -> FillMode:
+    """Kysy täyttötapa numerona; tyhjä vastaus palauttaa oletuksen."""
+    modes = list(FillMode)
+    print("\nMiten lomakkeella jo olevat rivit käsitellään?")
+    for i, m in enumerate(modes, start=1):
+        marker = " (oletus)" if m is default else ""
+        print(f"  {i}: {m.label}{marker}")
+        print(f"     {m.description}")
+    while True:
+        answer = input(f"Valinta [{modes.index(default) + 1}]: ").strip()
+        if not answer:
+            return default
+        if answer.isdigit() and 1 <= int(answer) <= len(modes):
+            return modes[int(answer) - 1]
+        try:
+            return FillMode.parse(answer)
+        except ValueError:
+            print("Virheellinen valinta, yritä uudelleen.")
+
+
 def print_summary(summary: Summary, log_file: Path) -> None:
     print("\n" + "=" * 60)
     print("  YHTEENVETO")
     print("=" * 60)
+    print(f"  Täyttötapa: {summary.mode.label}")
     for s in summary.sheets:
+        skipped = f", ohitettu {s.skipped_rows} (jo lomakkeella)" if s.skipped_rows else ""
         print(
-            f"  {s.sheet_name}: {s.successful_rows}/{s.total_rows} riviä ({s.success_rate:.0f} %)"
+            f"  {s.sheet_name}: {s.successful_rows}/{s.total_rows} riviä "
+            f"({s.success_rate:.0f} %){skipped}"
         )
         for err in s.errors[:3]:
             print(f"    - {err}")
@@ -243,6 +299,12 @@ def print_summary(summary: Summary, log_file: Path) -> None:
         f"  Yhteensä {summary.successful_rows}/{summary.total_rows} riviä onnistui "
         f"({summary.success_rate:.0f} %), virheitä {summary.total_errors}"
     )
+    if summary.skipped_rows:
+        print(f"  Ohitettu {summary.skipped_rows} riviä, jotka olivat jo lomakkeella")
+    if summary.removed_rows:
+        print(f"  Poistettu {summary.removed_rows} ylimääräistä riviä")
+    if summary.cleared_rows:
+        print(f"  Tyhjennetty {summary.cleared_rows} ylimääräistä riviä – poista ne Wilmassa käsin")
     if summary.failed_rows:
         print(f"  Tarkemmat tiedot lokissa: {log_file}")
 

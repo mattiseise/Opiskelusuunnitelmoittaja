@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .contact import TeacherContact
+from .fillmode import FillMode
 from .wizard import WizardConfig
 
 DEFAULT_CONFIG_PATH = Path("config.json")
@@ -72,6 +73,9 @@ class Selectors:
         }
     )
     input_in_cell: str = "input, textarea, select"
+    # Poistonappi rivin sisällä (Wilma: vain samassa istunnossa lisätyissä riveissä).
+    # Rivit, joilta nappi puuttuu, tyhjennetään korvaustilassa. Tyhjä = tyhjennä aina.
+    remove_row_button: str = "[id$='__remove']"
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,10 +99,17 @@ class Config:
     retry_delay_s: float = 1.0
     wizard: WizardConfig | None = None  # None = kysytään välilehdet numeroina
     teacher: TeacherContact = field(default_factory=TeacherContact)
+    fill_mode: FillMode = FillMode.APPEND  # oletustäyttötapa (GUI:ssa ja CLI:ssä ilman lippua)
+    key_field: str = "osaamistavoite"  # kenttä, jolla täydennystila tunnistaa jo olevan rivin
 
     @property
     def field_names(self) -> list[str]:
         return list(self.excel_columns)
+
+    @property
+    def resolved_key_field(self) -> str:
+        names = self.field_names
+        return self.key_field if self.key_field in names else names[0]
 
 
 def load_config(path: Path | str | None = None) -> Config:
@@ -134,6 +145,7 @@ def config_from_dict(raw: dict[str, Any], *, base_dir: Path | None = None) -> Co
     selectors = raw.get("selectors", {})
     logging_cfg = raw.get("logging", {})
     retry = raw.get("retry", {})
+    fill = raw.get("fill", {}) if isinstance(raw.get("fill"), dict) else {}
 
     return Config(
         excel_file=_path(files.get("excel_file"), d.excel_file),
@@ -151,6 +163,7 @@ def config_from_dict(raw: dict[str, Any], *, base_dir: Path | None = None) -> Co
             add_row_button=selectors.get("add_row_button", ds.add_row_button),
             field_cells=dict(selectors.get("field_cells", ds.field_cells)),
             input_in_cell=selectors.get("input_in_cell", ds.input_in_cell),
+            remove_row_button=str(selectors.get("remove_row_button", ds.remove_row_button)),
         ),
         excel_columns=dict(raw.get("excel_columns", d.excel_columns)),
         empty_value=str(raw.get("empty_value", d.empty_value)),
@@ -165,6 +178,8 @@ def config_from_dict(raw: dict[str, Any], *, base_dir: Path | None = None) -> Co
         teacher=TeacherContact.from_dict(raw["teacher"])
         if isinstance(raw.get("teacher"), dict)
         else TeacherContact(),
+        fill_mode=FillMode.parse(fill.get("mode"), default=d.fill_mode),
+        key_field=str(fill.get("key_field") or d.key_field),
     )
 
 
@@ -193,10 +208,12 @@ def config_to_dict(config: Config, *, base_dir: Path | None = None) -> dict[str,
             "add_row_button": config.selectors.add_row_button,
             "field_cells": dict(config.selectors.field_cells),
             "input_in_cell": config.selectors.input_in_cell,
+            "remove_row_button": config.selectors.remove_row_button,
         },
         "excel_columns": dict(config.excel_columns),
         "empty_value": config.empty_value,
         "separator_row_between_sheets": config.separator_row_between_sheets,
+        "fill": {"mode": config.fill_mode.value, "key_field": config.key_field},
         "retry": {"max_attempts": config.max_attempts, "delay_s": config.retry_delay_s},
         "logging": {"level": config.log_level},
     }

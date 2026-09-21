@@ -13,6 +13,7 @@ from ..browser import BrowserError, connect, find_form_page
 from ..config import Config
 from ..excel import Sheet
 from ..filler import FormFiller, Summary
+from ..fillmode import FillMode
 
 
 class QtLogHandler(logging.Handler, QObject):
@@ -40,11 +41,19 @@ class FillWorker(QThread):
     finished_ok = Signal(object)  # Summary
     failed = Signal(str)
 
-    def __init__(self, config: Config, sheets: list[Sheet], *, dry_run: bool = False) -> None:
+    def __init__(
+        self,
+        config: Config,
+        sheets: list[Sheet],
+        *,
+        dry_run: bool = False,
+        mode: FillMode | None = None,
+    ) -> None:
         super().__init__()
         self.config = config
         self.sheets = sheets
         self.dry_run = dry_run
+        self.mode = mode if mode is not None else config.fill_mode
         self._stop = threading.Event()
         self._done = 0
         self._total = sum(len(s.rows) for s in sheets)
@@ -63,6 +72,7 @@ class FillWorker(QThread):
                     None,
                     self.config,
                     dry_run=True,
+                    mode=self.mode,
                     progress=self._on_progress,
                     stop_requested=self._stop.is_set,
                 ).process_sheets(self.sheets)
@@ -76,6 +86,7 @@ class FillWorker(QThread):
                 filler = FormFiller(
                     page,
                     self.config,
+                    mode=self.mode,
                     progress=self._on_progress,
                     stop_requested=self._stop.is_set,
                 )
