@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 from ..config import BrowserConfig, Config, Selectors, save_config
 from ..contact import DEFAULT_TEMPLATE, TeacherContact
 from ..fillmode import FillMode
+from ..update import UpdateCheck
 from ..wizard import OptionalSheet, WizardConfig
 from .theme import MIDDOT
 from .update_panel import UpdatePanel
@@ -46,6 +47,7 @@ class SettingsDialog(QDialog):
         parent: QWidget | None = None,
         *,
         tab: str | None = None,
+        update_check: UpdateCheck | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Asetukset")
@@ -62,7 +64,7 @@ class SettingsDialog(QDialog):
         tabs.addTab(self._build_general(), "Yleiset")
         tabs.addTab(self._build_wizard(), "Kysely")
         tabs.addTab(self._build_selectors(), "Lomake")
-        self.update_panel = UpdatePanel(self)
+        self.update_panel = UpdatePanel(self, check=update_check)
         tabs.addTab(self.update_panel, "Päivitys")
         tabs.setCurrentIndex(TAB_NAMES.index(tab) if tab in TAB_NAMES else 0)
         self.tabs = tabs

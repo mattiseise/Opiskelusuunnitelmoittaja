@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="suunnitelmoittaja",
         description=(
-            "Opintosuunnitelman täyttäjä: täyttää Wilman opiskelusuunnitelmalomakkeen "
+            "Opintosuunnitelman muokkaaja: täyttää Wilman opiskelusuunnitelmalomakkeen "
             "Excel-taulukosta."
         ),
         epilog=__doc__,

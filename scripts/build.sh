@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Rakentaa standalone-sovelluksen macOS:lle (tai Linuxille) PyInstallerilla.
-#   scripts/build.sh            → dist/Opintosuunnitelman täyttäjä.app + dist/OpintosuunnitelmanTayttaja-<versio>-macos-<arch>.dmg
+#   scripts/build.sh            → dist/Opintosuunnitelman muokkaaja.app + dist/OpintosuunnitelmanTayttaja-<versio>-macos-<arch>.dmg
 #   scripts/build.sh --no-dmg   → vain .app
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -20,7 +20,7 @@ rm -rf build dist
 uv run pyinstaller packaging/OpintosuunnitelmanTayttaja.spec --noconfirm --log-level WARN
 
 if [[ "$OS" == "Darwin" ]]; then
-  APP="dist/Opintosuunnitelman täyttäjä.app"
+  APP="dist/Opintosuunnitelman muokkaaja.app"
   # Playwrightin node-binäärin pitää olla ajettava
   chmod +x "$APP/Contents/Frameworks/playwright/driver/node" 2>/dev/null || \
   chmod +x "$APP/Contents/Resources/playwright/driver/node" 2>/dev/null || true
@@ -35,7 +35,7 @@ if [[ "$OS" == "Darwin" ]]; then
     STAGE=$(mktemp -d)
     cp -R "$APP" "$STAGE/"
     ln -s /Applications "$STAGE/Applications"
-    hdiutil create -volname "Opintosuunnitelman täyttäjä" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+    hdiutil create -volname "Opintosuunnitelman muokkaaja" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
     rm -rf "$STAGE"
     echo "✔ $DMG"
   fi

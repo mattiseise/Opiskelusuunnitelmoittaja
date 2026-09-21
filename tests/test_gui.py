@@ -372,3 +372,33 @@ def test_fill_worker_mode_from_flag_and_config(qtbot, config_path: Path, excel_f
     assert FillWorker(config, sheets, mode=FillMode.COMPLETE).mode is FillMode.COMPLETE
     cfg = replace(config, fill_mode=FillMode.COMPLETE)
     assert FillWorker(cfg, sheets).mode is FillMode.COMPLETE
+
+
+def test_update_available_link_and_panel_button(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.update import UpdateCheck
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert not win.btn_update_available.isVisibleTo(win)  # ei vielä tarkistettu
+
+    win._on_update_checked(UpdateCheck("git", "abc1234", "def5678", available=False))
+    assert not win.btn_update_available.isVisibleTo(win)
+
+    check = UpdateCheck("git", "abc1234", "def5678 (2 uutta committia)", available=True)
+    win._on_update_checked(check)
+    assert win.btn_update_available.isVisibleTo(win)
+    assert win.btn_update_available.text() == "Päivitys saatavilla"
+    assert win.update_check is check
+
+    # Asetukset → Päivitys saa saman tuloksen ilman uutta hakua
+    dialog = SettingsDialog(win.config, config_path, win, tab="Päivitys", update_check=check)
+    qtbot.addWidget(dialog)
+    assert dialog.tabs.tabText(dialog.tabs.currentIndex()) == "Päivitys"
+    panel = dialog.update_panel
+    assert panel.btn_update.text() == "Päivitys saatavilla"
+    assert panel.btn_update.isEnabled()
+    assert panel.status_label.text().startswith("Uusia muutoksia gitissä")
+
+    # ajan tasalla → tavallinen nappi
+    panel._on_checked(UpdateCheck("git", "abc1234", "abc1234", available=False))
+    assert panel.btn_update.text() == "Päivitä"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, replace
@@ -44,9 +45,11 @@ from ..excel import ExcelError, PlanRow, Sheet, list_sheets, read_sheet
 from ..filler import Summary
 from ..fillmode import FillMode
 from ..logsetup import setup_logging
+from ..update import UpdateCheck
 from . import theme
 from .preview_table import GRIP, GripDelegate, PreviewTable
 from .settings_dialog import SettingsDialog
+from .update_panel import AVAILABLE_TEXT, UpdateWorker
 from .worker import FillWorker, QtLogHandler, ReadWorker
 
 log = logging.getLogger("suunnitelmoittaja.gui")
@@ -93,6 +96,8 @@ class MainWindow(QMainWindow):
         self._order: list[tuple[str, int]] = []  # käyttäjän järjestys, jos riviä siirretty
         self._wilma_rows: list[PlanRow] = []
         self.reader: ReadWorker | None = None
+        self.update_check: UpdateCheck | None = None
+        self._update_worker: UpdateWorker | None = None
 
         self.setWindowTitle(APP_TITLE)
         self.resize(1080, 760)
@@ -106,6 +111,8 @@ class MainWindow(QMainWindow):
         self._chrome_timer.timeout.connect(self._poll_chrome)
         self._chrome_timer.start(2000)
         self._poll_chrome()
+        if not os.environ.get("SUUNNITELMOITTAJA_NO_UPDATE_CHECK"):
+            QTimer.singleShot(1500, self.check_for_updates_quietly)
 
     # ------------------------------------------------------------------ rakenne
 
@@ -168,8 +175,19 @@ class MainWindow(QMainWindow):
         )
         btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_settings.clicked.connect(self.open_settings)
+        self.btn_update_available = QPushButton(AVAILABLE_TEXT)
+        self.btn_update_available.setProperty("variant", "link")
+        self.btn_update_available.setStyleSheet(
+            f"color: {theme.TOKENS['on_section']}; text-decoration: underline; "
+            "font-size: 13px; font-weight: 600;"
+        )
+        self.btn_update_available.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_update_available.setToolTip("Uudempi versio on saatavilla. Avaa Päivitys.")
+        self.btn_update_available.clicked.connect(lambda: self.open_settings(tab="Päivitys"))
+        self.btn_update_available.setVisible(False)
         meta.addWidget(version)
         meta.addWidget(btn_settings, 0, Qt.AlignmentFlag.AlignRight)
+        meta.addWidget(self.btn_update_available, 0, Qt.AlignmentFlag.AlignRight)
         h.addLayout(meta)
         outer.addWidget(header)
 
@@ -929,8 +947,36 @@ class MainWindow(QMainWindow):
             f"Avattu {self.excel_path.name}. Tallenna Excel ja paina Lataa uudelleen.", 6000
         )
 
+    def check_for_updates_quietly(self) -> None:
+        """Taustatarkistus käynnistyksessä: näyttää linkin, jos uudempi versio on saatavilla.
+
+        Virheet (ei verkkoa, ei gitiä) menevät vain lokiin, käyttäjää ei häiritä.
+        """
+        if self._update_worker is not None:
+            return
+        self._update_worker = UpdateWorker("check", self)
+        self._update_worker.checked.connect(self._on_update_checked)
+        self._update_worker.failed.connect(
+            lambda msg: log.debug("Päivitystarkistus ohitettiin: %s", msg)
+        )
+        self._update_worker.finished.connect(self._on_update_worker_done)
+        self._update_worker.start()
+
+    @Slot(object)
+    def _on_update_checked(self, check: UpdateCheck) -> None:
+        self.update_check = check
+        self.btn_update_available.setVisible(check.available)
+        if check.available:
+            log.info("%s: %s", AVAILABLE_TEXT, check.summary)
+            self.statusBar().showMessage(f"{AVAILABLE_TEXT}{theme.MIDDOT}{check.summary}", 8000)
+
+    def _on_update_worker_done(self) -> None:
+        self._update_worker = None
+
     def open_settings(self, tab: str | None = None) -> None:
-        dialog = SettingsDialog(self.config, self.config_path, self, tab=tab)
+        dialog = SettingsDialog(
+            self.config, self.config_path, self, tab=tab, update_check=self.update_check
+        )
         if dialog.exec():
             self.reload_config()
             self.statusBar().showMessage("Asetukset tallennettu", 3000)

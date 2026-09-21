@@ -55,12 +55,16 @@ class UpdateWorker(QThread):
             self.failed.emit(f"Odottamaton virhe: {exc}")
 
 
+AVAILABLE_TEXT = "Päivitys saatavilla"
+
+
 class UpdatePanel(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *, check: UpdateCheck | None = None) -> None:
         super().__init__(parent)
         self.worker: UpdateWorker | None = None
         self.check: UpdateCheck | None = None
         self.root = repo_root()
+        self._default_update_text = "Päivitä" if self.root is not None else "Avaa lataussivu"
 
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
@@ -81,7 +85,7 @@ class UpdatePanel(QWidget):
         self.btn_check = QPushButton("Tarkista päivitykset")
         self.btn_check.clicked.connect(self.start_check)
         buttons.addWidget(self.btn_check)
-        self.btn_update = QPushButton("Päivitä" if self.root is not None else "Avaa lataussivu")
+        self.btn_update = QPushButton(self._default_update_text)
         self.btn_update.setProperty("variant", "primary")
         self.btn_update.setEnabled(False)
         self.btn_update.clicked.connect(self.start_update)
@@ -104,6 +108,11 @@ class UpdatePanel(QWidget):
         self.log_view.setReadOnly(True)
         self.log_view.setPlaceholderText("Tarkistuksen ja päivityksen loki näkyy tässä.")
         layout.addWidget(self.log_view, 1)
+
+        if check is not None:
+            # pääikkuna tarkisti jo käynnistyksessä → näytä tulos heti, ei uutta hakua
+            self._on_checked(check)
+            self.btn_update.setEnabled(self._update_button_enabled)
 
     # ------------------------------------------------------------------ toiminnot
 
@@ -153,6 +162,7 @@ class UpdatePanel(QWidget):
         for warning in check.warnings:
             self.log_view.appendPlainText(f"Huom. {warning}")
         self._update_button_enabled = check.available or self.root is None
+        self.btn_update.setText(AVAILABLE_TEXT if check.available else self._default_update_text)
 
     @Slot(str)
     def _on_applied(self, message: str) -> None:
@@ -160,6 +170,7 @@ class UpdatePanel(QWidget):
         self.log_view.appendPlainText(message)
         self.check = None
         self._update_button_enabled = False
+        self.btn_update.setText(self._default_update_text)
         if message.startswith("Ei uusia"):
             return
         answer = QMessageBox.question(

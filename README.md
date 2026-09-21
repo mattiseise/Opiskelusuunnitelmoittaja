@@ -1,4 +1,4 @@
-# Opintosuunnitelman täyttäjä
+# Opintosuunnitelman muokkaaja
 
 (Repo ja Python-paketti: `Opiskelusuunnitelmoittaja` / `opiskelusuunnitelmoittaja`; komentorivikomento `suunnitelmoittaja`.)
 
@@ -26,15 +26,15 @@ tulee paketin mukana. Pakettien latauspaikka: [Releases](https://github.com/matt
 **Valmis sovellus**
 
 1. Lataa `OpintosuunnitelmanTayttaja-<versio>-macos-arm64.dmg`, avaa se ja vedä
-   *Opintosuunnitelman täyttäjä* Ohjelmat-kansioon.
+   *Opintosuunnitelman muokkaaja* Ohjelmat-kansioon.
 2. Ensimmäisellä avauksella macOS voi estää ad hoc -allekirjoitetun paketin. Salli se joko
    Järjestelmäasetukset → Tietosuoja ja suojaus → *Avaa silti*, tai Terminaalissa:
 
    ```bash
-   xattr -dr com.apple.quarantine "/Applications/Opintosuunnitelman täyttäjä.app"
+   xattr -dr com.apple.quarantine "/Applications/Opintosuunnitelman muokkaaja.app"
    ```
 
-3. Käynnistä sovellus Launchpadista tai Spotlightista ("Opintosuunnitelman täyttäjä").
+3. Käynnistä sovellus Launchpadista tai Spotlightista ("Opintosuunnitelman muokkaaja").
 
 Asetukset ja Excel-pohja kopioidaan ensimmäisellä käynnistyksellä kansioon
 `~/Library/Application Support/OpintosuunnitelmanTayttaja/` (Tiedosto → *Avaa asetuskansio*).
@@ -50,7 +50,7 @@ git clone https://github.com/mattiseise/Opiskelusuunnitelmoittaja
 cd Opiskelusuunnitelmoittaja
 uv sync --extra gui
 uv run suunnitelmoittaja-gui           # käyttöliittymä
-scripts/make-launcher.sh --dock        # Dock-käynnistin "Opintosuunnitelman täyttäjä (dev)"
+scripts/make-launcher.sh --dock        # Dock-käynnistin "Opintosuunnitelman muokkaaja (dev)"
 ```
 
 **Oma paketti** (.app + .dmg kansioon `dist/`):
@@ -69,7 +69,7 @@ uv run suunnitelmoittaja fill 2 --dry-run
 ```
 
 Paketoidusta sovelluksesta komentorivi on
-`"/Applications/Opintosuunnitelman täyttäjä.app/Contents/MacOS/OpintosuunnitelmanTayttaja" --cli fill 1`.
+`"/Applications/Opintosuunnitelman muokkaaja.app/Contents/MacOS/OpintosuunnitelmanTayttaja" --cli fill 1`.
 
 ### Windows
 
@@ -117,8 +117,8 @@ Versiotagi käynnistää GitHub Actions -putken, joka ajaa testit, rakentaa macO
 Windows-paketit ja liittää ne Releaseen asennusohjeineen:
 
 ```bash
-git tag v2.1.0
-git push origin v2.1.0
+git tag v2.2.0
+git push origin v2.2.0
 ```
 
 ## Käyttö ikkunassa
@@ -175,8 +175,11 @@ kysely kysyy sen, jos lippua ei anneta.
 
 ### Päivitys
 
+Sovellus tarkistaa käynnistyessään taustalla, onko uudempi versio saatavilla. Jos on,
+otsikkovyöhön ilmestyy linkki **Päivitys saatavilla**, joka avaa *Asetukset → Päivitys*.
+Tarkistuksen voi estää ympäristömuuttujalla `SUUNNITELMOITTAJA_NO_UPDATE_CHECK=1`.
 *Asetukset → Päivitys* (tai *Ohje → Tarkista päivitykset…*) näyttää nykyisen version ja
-tarkistaa uusimman. Kehitysversiossa (git-klooni) **Päivitä** ajaa repokansiossa
+tarkistaa uusimman; kun päivitys on saatavilla, napin teksti on *Päivitys saatavilla*. Kehitysversiossa (git-klooni) **Päivitä** ajaa repokansiossa
 `git pull --ff-only` ja `uv sync --extra gui` (jos `uv` on PATHissa tai ympäristömuuttujassa
 `SUUNNITELMOITTAJA_UV`) ja tarjoaa uudelleenkäynnistystä. Paikalliset muutokset varoitetaan
 etukäteen; ristiriita keskeyttää päivityksen koskematta tiedostoihin. Paketoitu sovellus
@@ -324,7 +327,7 @@ uv run pyright
 ### Sovelluspaketin rakentaminen
 
 ```bash
-scripts/build.sh                                           # macOS → dist/Opintosuunnitelman täyttäjä.app + .dmg (Linux → .tar.gz)
+scripts/build.sh                                           # macOS → dist/Opintosuunnitelman muokkaaja.app + .dmg (Linux → .tar.gz)
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1  # Windows → dist/*.zip
 ```
 
@@ -332,7 +335,7 @@ Paketointi käyttää PyInstalleria (`packaging/OpintosuunnitelmanTayttaja.spec`
 Node-ajuri pakataan mukaan, selainta ei: sovellus kytkeytyy käyttäjän omaan Chromeen.
 Paketoitua sovellusta voi ajaa myös komentoriviltä: `OpintosuunnitelmanTayttaja --cli fill 1`.
 
-Julkaisu: `git tag v2.1.0 && git push --tags` käynnistää GitHub Actions -putken
+Julkaisu: `git tag v2.2.0 && git push --tags` käynnistää GitHub Actions -putken
 (`.github/workflows/release.yml`), joka ajaa testit, rakentaa macOS- ja Windows-paketit ja
 liittää ne GitHub Releaseen.
 

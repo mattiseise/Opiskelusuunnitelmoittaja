@@ -1,5 +1,5 @@
 @echo off
-rem Käynnistää Opintosuunnitelman täyttäjän käyttöliittymän kehitysversiona tästä repokansiosta.
+rem Käynnistää Opintosuunnitelman muokkaajan käyttöliittymän kehitysversiona tästä repokansiosta.
 rem uv on asennettu D:\programming\uv (ei PATHissa), välimuisti D:\programming\uv-cache.
 rem uv lisätään PATHiin, jotta sovelluksen Päivitä-nappi voi ajaa "uv sync" git pullin jälkeen.
 set "PATH=D:\programming\uv;%PATH%"

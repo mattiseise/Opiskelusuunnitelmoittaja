@@ -8,6 +8,9 @@ from openpyxl import Workbook
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
+# Pääikkunan automaattinen päivitystarkistus ei saa tehdä verkkokutsuja testeissä
+os.environ.setdefault("SUUNNITELMOITTAJA_NO_UPDATE_CHECK", "1")
+
 
 @pytest.fixture
 def excel_file(tmp_path: Path) -> Path:

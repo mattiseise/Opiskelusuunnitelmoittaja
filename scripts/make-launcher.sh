@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Tekee kehityskäynnistimen macOS:lle: ~/Applications/Opintosuunnitelman täyttäjä (dev).app
+# Tekee kehityskäynnistimen macOS:lle: ~/Applications/Opintosuunnitelman muokkaaja (dev).app
 # Käynnistin ajaa `uv run suunnitelmoittaja-gui` tästä repokansiosta, joten koodimuutokset
 # näkyvät heti ilman PyInstaller-buildia. Ikoni tehdään packaging/icon.png:stä.
 #
-#   scripts/make-launcher.sh            → ~/Applications/Opintosuunnitelman täyttäjä (dev).app
+#   scripts/make-launcher.sh            → ~/Applications/Opintosuunnitelman muokkaaja (dev).app
 #   scripts/make-launcher.sh --dock     → sama + lisää Dockiin
 #
 # Varsinainen jaettava sovellus rakennetaan scripts/build.sh:lla (PyInstaller, ei vaadi uv:ta).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-NAME="Opintosuunnitelman täyttäjä (dev)"
+NAME="Opintosuunnitelman muokkaaja (dev)"
 APP="$HOME/Applications/$NAME.app"
 UV_BIN="$(command -v uv || true)"
 [[ -n "$UV_BIN" ]] || { echo "uv ei löydy PATHista. Asenna: brew install uv"; exit 1; }
@@ -32,7 +32,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0"><dict>
   <key>CFBundleName</key><string>$NAME</string>
   <key>CFBundleDisplayName</key><string>$NAME</string>
-  <key>CFBundleIdentifier</key><string>fi.seise.opintosuunnitelmantayttaja.dev</string>
+  <key>CFBundleIdentifier</key><string>fi.seise.opintosuunnitelmanmuokkaaja.dev</string>
   <key>CFBundleVersion</key><string>dev</string>
   <key>CFBundleShortVersionString</key><string>dev</string>
   <key>CFBundleExecutable</key><string>launch</string>
