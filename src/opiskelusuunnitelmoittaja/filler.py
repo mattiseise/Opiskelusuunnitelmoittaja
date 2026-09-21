@@ -151,8 +151,9 @@ class FormFiller:
     def read_rows(self) -> list[PlanRow]:
         """Lue lomakkeen nykyiset rivit (kentät config.field_names-järjestyksessä).
 
-        Tyhjät rivit ohitetaan. Käytetään, kun opiskelijan olemassa oleva suunnitelma
-        halutaan esikatseluun muokattavaksi.
+        Lomakkeen lopussa olevat tyhjät rivit (Wilman valmis tyhjä rivi) ohitetaan; rivien
+        välissä olevat tyhjät säilytetään, jotta esikatselu näyttää lomakkeen sellaisenaan.
+        Käytetään, kun opiskelijan olemassa oleva suunnitelma halutaan esikatseluun.
         """
         rows: list[PlanRow] = []
         table_rows = self._rows()
@@ -166,9 +167,9 @@ class FormFiller:
                     continue
                 control = tr.locator(cell_selector).locator(self.selectors.input_in_cell).first
                 values[field_name] = control.input_value().strip() if control.count() > 0 else ""
-            row = PlanRow(values)
-            if not row.is_empty():
-                rows.append(row)
+            rows.append(PlanRow(values))
+        while rows and rows[-1].is_empty():
+            rows.pop()
         log.info("Luettiin lomakkeelta %d riviä", len(rows))
         return rows
 
@@ -304,6 +305,9 @@ class FormFiller:
             log.info("[kuiva-ajo] uusi rivi: %s", row.values)
             return
         table_row = self._next_empty_row() or self.add_table_row()
+        if row.is_empty():
+            log.info("Tyhjä rivi (välirivi) jätetään tyhjäksi")
+            return
         failures: list[str] = []
         for field_name in self.config.field_names:
             value = row.values.get(field_name, "")

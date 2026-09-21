@@ -7,8 +7,8 @@ ja pääikkuna järjestää oman rivimallinsa ja piirtää taulukon uudelleen.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QModelIndex, QPersistentModelIndex, Qt, Signal
-from PySide6.QtGui import QColor, QDropEvent, QPainter
+from PySide6.QtCore import QLineF, QModelIndex, QPersistentModelIndex, Qt, Signal
+from PySide6.QtGui import QColor, QDropEvent, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QStyle,
@@ -53,6 +53,44 @@ class GripDelegate(QStyledItemDelegate):
         for dx in (-3, 3):
             for dy in (-5, 0, 5):
                 painter.drawEllipse(cx + dx - 1, cy + dy - 1, 2, 2)
+        painter.restore()
+
+
+class TrashDelegate(QStyledItemDelegate):
+    """Piirtää poistosarakkeeseen pienen roskakorin ohuina viivoina (ei bittikarttaikonia)."""
+
+    def __init__(self, color: str, parent: QTableWidget) -> None:
+        super().__init__(parent)
+        self._color = QColor(color)
+
+    def paint(
+        self,
+        painter: QPainter,
+        option: QStyleOptionViewItem,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> None:
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        widget = opt.widget
+        style = widget.style() if widget is not None else None
+        if style is not None:
+            style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, widget)
+        rect = option.rect
+        cx, cy = rect.center().x(), rect.center().y()
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(self._color, 1.2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        # kansi + kahva
+        painter.drawLine(QLineF(cx - 6, cy - 5, cx + 6, cy - 5))
+        painter.drawLine(QLineF(cx - 2, cy - 7, cx + 2, cy - 7))
+        # runko (hieman kapeneva) ja kaksi uraa
+        painter.drawLine(QLineF(cx - 5, cy - 5, cx - 4, cy + 6))
+        painter.drawLine(QLineF(cx + 5, cy - 5, cx + 4, cy + 6))
+        painter.drawLine(QLineF(cx - 4, cy + 6, cx + 4, cy + 6))
+        painter.drawLine(QLineF(cx - 1.5, cy - 2, cx - 1.5, cy + 3))
+        painter.drawLine(QLineF(cx + 1.5, cy - 2, cx + 1.5, cy + 3))
         painter.restore()
 
 

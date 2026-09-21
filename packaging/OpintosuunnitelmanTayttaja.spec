@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller-määrittely: Opintosuunnitelman täyttäjä (GUI) + Playwright-ajuri.
+"""PyInstaller-määrittely: Opintosuunnitelman muokkaaja (GUI) + Playwright-ajuri.
 
 Ajo repon juuresta:  uv run pyinstaller packaging/OpintosuunnitelmanTayttaja.spec --noconfirm
-Tulos: dist/OpintosuunnitelmanTayttaja/ (Linux/Windows) tai dist/Opintosuunnitelman täyttäjä.app (macOS).
+Tulos: dist/OpintosuunnitelmanTayttaja/ (Linux/Windows) tai dist/Opintosuunnitelman muokkaaja.app (macOS).
 """
 
 import sys
@@ -81,16 +81,16 @@ coll = COLLECT(
 if sys.platform == "darwin":
     app = BUNDLE(
         coll,
-        name="Opintosuunnitelman täyttäjä.app",
+        name="Opintosuunnitelman muokkaaja.app",
         icon=ICON,
         bundle_identifier="fi.seise.opintosuunnitelmantayttaja",
         info_plist={
-            "CFBundleShortVersionString": "2.3.0",
-            "CFBundleVersion": "2.3.0",
+            "CFBundleShortVersionString": "2.4.0",
+            "CFBundleVersion": "2.4.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
             "NSHumanReadableCopyright": "Matti Seise",
-            "CFBundleDisplayName": "Opintosuunnitelman täyttäjä",
-            "CFBundleName": "Opintosuunnitelman täyttäjä",
+            "CFBundleDisplayName": "Opintosuunnitelman muokkaaja",
+            "CFBundleName": "Opintosuunnitelman muokkaaja",
         },
     )

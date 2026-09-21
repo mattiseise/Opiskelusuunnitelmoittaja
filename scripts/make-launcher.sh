@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
-# Tekee kehityskäynnistimen macOS:lle: ~/Applications/Opintosuunnitelman muokkaaja (dev).app
+# Tekee kehityskäynnistimen macOS:lle: ~/Applications/Opintosuunnitelman muokkaaja.app
 # Käynnistin ajaa `uv run suunnitelmoittaja-gui` tästä repokansiosta, joten koodimuutokset
 # näkyvät heti ilman PyInstaller-buildia. Ikoni tehdään packaging/icon.png:stä.
 #
-#   scripts/make-launcher.sh            → ~/Applications/Opintosuunnitelman muokkaaja (dev).app
+#   scripts/make-launcher.sh            → ~/Applications/Opintosuunnitelman muokkaaja.app
 #   scripts/make-launcher.sh --dock     → sama + lisää Dockiin
 #
 # Varsinainen jaettava sovellus rakennetaan scripts/build.sh:lla (PyInstaller, ei vaadi uv:ta).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-NAME="Opintosuunnitelman muokkaaja (dev)"
+NAME="Opintosuunnitelman muokkaaja"
 APP="$HOME/Applications/$NAME.app"
+# Vanhat kehityskäynnistimet pois, jotta Dockiin/Launchpadiin ei jää tuplia
+for old in "$HOME/Applications/Opintosuunnitelman täyttäjä (dev).app" \
+           "$HOME/Applications/Opintosuunnitelman täyttäjä (Dev).app" \
+           "$HOME/Applications/Opintosuunnitelman muokkaaja (dev).app"; do
+  [[ -d "$old" ]] && rm -rf "$old" && echo "poistettu vanha käynnistin: $old"
+done
 UV_BIN="$(command -v uv || true)"
 [[ -n "$UV_BIN" ]] || { echo "uv ei löydy PATHista. Asenna: brew install uv"; exit 1; }
 [[ "$(uname -s)" == "Darwin" ]] || { echo "Tämä skripti on macOS:lle. Linuxissa käytä scripts/build.sh."; exit 1; }
@@ -19,10 +25,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cat > "$APP/Contents/MacOS/launch" <<LAUNCH
 #!/usr/bin/env bash
-# Käynnistää GUI:n repokansiosta. Loki: ~/Library/Logs/OpintosuunnitelmanTayttaja-dev.log
+# Käynnistää GUI:n repokansiosta. Loki: ~/Library/Logs/OpintosuunnitelmanMuokkaaja.log
 export PATH="$(dirname "$UV_BIN"):/opt/homebrew/bin:/usr/local/bin:\$PATH"
 cd "$REPO"
-exec "$UV_BIN" run --project "$REPO" suunnitelmoittaja-gui >> "\$HOME/Library/Logs/OpintosuunnitelmanTayttaja-dev.log" 2>&1
+exec "$UV_BIN" run --project "$REPO" suunnitelmoittaja-gui >> "\$HOME/Library/Logs/OpintosuunnitelmanMuokkaaja.log" 2>&1
 LAUNCH
 chmod +x "$APP/Contents/MacOS/launch"
 
@@ -32,7 +38,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0"><dict>
   <key>CFBundleName</key><string>$NAME</string>
   <key>CFBundleDisplayName</key><string>$NAME</string>
-  <key>CFBundleIdentifier</key><string>fi.seise.opintosuunnitelmanmuokkaaja.dev</string>
+  <key>CFBundleIdentifier</key><string>fi.seise.opintosuunnitelmanmuokkaaja.local</string>
   <key>CFBundleVersion</key><string>dev</string>
   <key>CFBundleShortVersionString</key><string>dev</string>
   <key>CFBundleExecutable</key><string>launch</string>

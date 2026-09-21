@@ -128,15 +128,22 @@ def test_contact_row_in_preview_and_settings(qtbot, config_path: Path) -> None:
     win.reload_config()
 
     assert win.contact_check.isEnabled() and win.contact_check.isChecked()
-    assert win.preview.rowCount() == 3
-    last = win.preview.item(2, 3).text()  # type: ignore[union-attr]
+    # välirivi näkyy esikatselussa omana tyhjänä rivinään lähteiden välissä
+    assert win.separator_check.isChecked()
+    assert win.preview.rowCount() == 4
+    assert win.preview.item(2, 2).text() == "Välirivi"  # type: ignore[union-attr]
+    assert win.preview.item(2, 3).text() == ""  # type: ignore[union-attr]
+    last = win.preview.item(3, 3).text()  # type: ignore[union-attr]
     assert last.startswith("Opiskelijalla on henkilökohtainen opintosuunnitelma")
     assert "Matti Seise, sähköposti: matti.seise@bc.fi tai puhelimitse: 041 534 5404" in last
-    assert win.preview.item(2, 2).text() == "Yhteystiedot"  # type: ignore[union-attr]
-    assert win.preview.item(2, 4).text() == ""  # type: ignore[union-attr]
+    assert win.preview.item(3, 2).text() == "Yhteystiedot"  # type: ignore[union-attr]
+    assert win.preview.item(3, 4).text() == ""  # type: ignore[union-attr]
     sheets = win.selected_sheets_for_fill()
-    assert [s.name for s in sheets][-1] == "Yhteystiedot"
+    assert [s.name for s in sheets] == ["Ohjelmistokehittäjä", "Välirivi", "Yhteystiedot"]
+    assert sheets[1].rows[0].is_empty()
 
+    win.separator_check.setChecked(False)
+    assert win.preview.rowCount() == 3
     win.contact_check.setChecked(False)
     assert win.preview.rowCount() == 2
 
@@ -167,6 +174,7 @@ def test_wilma_rows_edit_reorder_and_replace_mode(qtbot, config_path: Path) -> N
 
     win = MainWindow(config_path)
     qtbot.addWidget(win)
+    win.separator_check.setChecked(False)
     assert win.mode_append.isChecked()
     assert win.preview.rowCount() == 2  # Excel: Ohjelmointi, Tietoturva
 
@@ -447,3 +455,55 @@ def test_update_available_link_and_panel_button(qtbot, config_path: Path) -> Non
     # ajan tasalla → tavallinen nappi
     panel._on_checked(UpdateCheck("git", "abc1234", "abc1234", available=False))
     assert panel.btn_update.text() == "Päivitä"
+
+
+def test_delete_row_with_trash_and_restore(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.gui.main_window import DELETE_COL
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.separator_check.setChecked(False)
+    win.contact_check.setChecked(False)
+    assert win.preview.rowCount() == 2
+    assert not win.btn_restore.isVisibleTo(win)
+
+    win._on_preview_cell_clicked(0, DELETE_COL)  # roskakori ensimmäisellä rivillä
+    assert win.preview.rowCount() == 1
+    assert win.preview.item(0, 3).text() == "Tietoturva"  # type: ignore[union-attr]
+    assert win.btn_restore.isVisibleTo(win) and "(1)" in win.btn_restore.text()
+    assert [r.values["osaamistavoite"] for s in win.selected_sheets_for_fill() for r in s.rows] == [
+        "Tietoturva"
+    ]
+
+    # poisto säilyy, kun esikatselu rakennetaan uudelleen
+    win.update_preview()
+    assert win.preview.rowCount() == 1
+
+    win.restore_deleted_rows()
+    assert win.preview.rowCount() == 2
+    assert not win.btn_restore.isVisibleTo(win)
+
+
+def test_separator_rows_follow_reordering(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.excel import PlanRow
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.contact_check.setChecked(False)
+    win.separator_check.setChecked(True)
+    win._on_wilma_rows([PlanRow({"osaamistavoite": "W1", "laajuus": "1"})])
+    win.main_group.buttons()[0].setChecked(True)
+    sources = [win.preview.item(r, 2).text() for r in range(win.preview.rowCount())]  # type: ignore[union-attr]
+    assert sources == ["Wilma", "Välirivi", "Ohjelmistokehittäjä", "Ohjelmistokehittäjä"]
+
+    # siirrä Excel-rivi ylimmäksi: välirivi pysyy paikallaan käyttäjän järjestyksessä
+    win.move_row(2, 0)
+    sources = [win.preview.item(r, 2).text() for r in range(win.preview.rowCount())]  # type: ignore[union-attr]
+    assert sources == ["Ohjelmistokehittäjä", "Wilma", "Välirivi", "Ohjelmistokehittäjä"]
+    sheets = win.selected_sheets_for_fill()
+    assert [s.name for s in sheets] == [
+        "Ohjelmistokehittäjä",
+        "Wilma",
+        "Välirivi",
+        "Ohjelmistokehittäjä",
+    ]

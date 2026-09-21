@@ -50,7 +50,7 @@ git clone https://github.com/mattiseise/Opiskelusuunnitelmoittaja
 cd Opiskelusuunnitelmoittaja
 uv sync --extra gui
 uv run suunnitelmoittaja-gui           # käyttöliittymä
-scripts/make-launcher.sh --dock        # Dock-käynnistin "Opintosuunnitelman muokkaaja (dev)"
+scripts/make-launcher.sh --dock        # Dock-käynnistin "Opintosuunnitelman muokkaaja"
 ```
 
 **Oma paketti** (.app + .dmg kansioon `dist/`):
@@ -117,8 +117,8 @@ Versiotagi käynnistää GitHub Actions -putken, joka ajaa testit, rakentaa macO
 Windows-paketit ja liittää ne Releaseen asennusohjeineen:
 
 ```bash
-git tag v2.3.0
-git push origin v2.3.0
+git tag v2.4.0
+git push origin v2.4.0
 ```
 
 ## Käyttö ikkunassa
@@ -142,8 +142,12 @@ Ikkuna kulkee viidessä vaiheessa:
    Jokaisen solun voi muokata kaksoisnapsauttamalla, rivin rastin voi poistaa, otsikkorivin rasti
    valitsee tai poistaa kaikki, *Aseta ajankohta valituille* kirjoittaa saman ajankohdan
    rastitetuille. Rivin järjestystä vaihdetaan raahaamalla rivin alussa olevasta
-   tarttumasta ⋮⋮ (tai ▲▼-linkeillä). Näin opiskelijan olemassa olevaa suunnitelmaa voi
-   järjestellä, muokata ja täydentää Excelin riveillä ilman Wilman käsityötä.
+   tarttumasta ⋮⋮ (tai ▲▼-linkeillä), ja rivin oikean laidan roskakori poistaa rivin
+   esikatselusta (*Palauta poistetut* tuo ne takaisin). Tyhjät välirivit lähteiden välissä
+   näkyvät omina riveinään lähteenä *Välirivi*, samoin Wilman lomakkeen tyhjät rivit, joten
+   taulukko vastaa rivi riviltä sitä, mitä lomakkeelle kirjoitetaan. Näin opiskelijan
+   olemassa olevaa suunnitelmaa voi järjestellä, muokata ja täydentää Excelin riveillä ilman
+   Wilman käsityötä.
 
    ![Esikatselu muokattuna](docs/kuvat/02-esikatselu-muokattu.png)
 
@@ -341,7 +345,7 @@ Paketointi käyttää PyInstalleria (`packaging/OpintosuunnitelmanTayttaja.spec`
 Node-ajuri pakataan mukaan, selainta ei: sovellus kytkeytyy käyttäjän omaan Chromeen.
 Paketoitua sovellusta voi ajaa myös komentoriviltä: `OpintosuunnitelmanTayttaja --cli fill 1`.
 
-Julkaisu: `git tag v2.3.0 && git push --tags` käynnistää GitHub Actions -putken
+Julkaisu: `git tag v2.4.0 && git push --tags` käynnistää GitHub Actions -putken
 (`.github/workflows/release.yml`), joka ajaa testit, rakentaa macOS- ja Windows-paketit ja
 liittää ne GitHub Releaseen.
 

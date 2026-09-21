@@ -431,3 +431,20 @@ def test_norm_and_find_match() -> None:
     )
     assert _find_match("Ohjelmointi", existing) is None  # alkuosa, mutta eri sana
     assert _find_match("", existing) is None
+
+
+def test_empty_plan_row_becomes_blank_separator(page: Page, lomake_url: str) -> None:
+    """Esikatselun välirivi (tyhjä PlanRow) varaa rivin mutta jättää solut tyhjiksi."""
+    page.goto(lomake_url)
+    filler = FormFiller(page, CFG)
+    filler.fill_new_row(_row("A1", "1"))
+    filler.fill_new_row(PlanRow({}))
+    filler.fill_new_row(_row("B1", "2"))
+    assert [v[0] for v in _table_values(page)] == ["A1", "", "B1"]
+    assert _table_values(page)[1] == ["", "", "", ""]
+    # välirivi ei näy luetuissa riveissä vain, jos se on lopussa
+    assert [r.values["osaamistavoite"] for r in FormFiller(page, CFG).read_rows()] == [
+        "A1",
+        "",
+        "B1",
+    ]
