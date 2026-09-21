@@ -63,8 +63,8 @@ def test_main_window_builds_selection_from_wizard(qtbot, config_path: Path) -> N
     # Rikki-välilehdeltä puuttuu sarakkeita → esikatselussa vain pääsuuntaus
     assert win.selected_sheet_names() == ["Ohjelmistokehittäjä", "Rikki"]
     assert win.preview.rowCount() == 2
-    assert win.preview.item(0, 2).text() == "Ohjelmointi"  # type: ignore[union-attr]
-    assert win.preview.item(0, 3).text() == "45"  # type: ignore[union-attr]
+    assert win.preview.item(0, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(0, 4).text() == "45"  # type: ignore[union-attr]
 
     boxes[0].setChecked(False)
     win.main_group.buttons()[1].setChecked(True)
@@ -92,7 +92,7 @@ def test_preview_row_checkboxes_and_toggle(qtbot, config_path: Path) -> None:
     assert win.checked_row_indices() == [0, 1]
     assert win.header_check.checkState() == Qt.CheckState.Checked
 
-    win.preview.item(1, 0).setCheckState(Qt.CheckState.Unchecked)  # type: ignore[union-attr]
+    win.preview.item(1, 1).setCheckState(Qt.CheckState.Unchecked)  # type: ignore[union-attr]
     assert win.checked_row_indices() == [0]
     assert win.preview_label.text().startswith("1 / 2 RIVIÄ")
     assert win.header_check.checkState() == Qt.CheckState.PartiallyChecked
@@ -124,11 +124,11 @@ def test_contact_row_in_preview_and_settings(qtbot, config_path: Path) -> None:
 
     assert win.contact_check.isEnabled() and win.contact_check.isChecked()
     assert win.preview.rowCount() == 3
-    last = win.preview.item(2, 2).text()  # type: ignore[union-attr]
+    last = win.preview.item(2, 3).text()  # type: ignore[union-attr]
     assert last.startswith("Opiskelijalla on henkilökohtainen opintosuunnitelma")
     assert "Matti Seise, sähköposti: matti.seise@bc.fi tai puhelimitse: 041 534 5404" in last
-    assert win.preview.item(2, 1).text() == "Yhteystiedot"  # type: ignore[union-attr]
-    assert win.preview.item(2, 3).text() == ""  # type: ignore[union-attr]
+    assert win.preview.item(2, 2).text() == "Yhteystiedot"  # type: ignore[union-attr]
+    assert win.preview.item(2, 4).text() == ""  # type: ignore[union-attr]
     sheets = win.selected_sheets_for_fill()
     assert [s.name for s in sheets][-1] == "Yhteystiedot"
 
@@ -140,11 +140,11 @@ def test_time_column_editable_and_applied(qtbot, config_path: Path) -> None:
     win = MainWindow(config_path)
     qtbot.addWidget(win)
     col = win._time_column()
-    assert col == 5
+    assert col == 6
     cell = win.preview.item(0, col)
     assert cell is not None and bool(cell.flags() & Qt.ItemFlag.ItemIsEditable)
-    assert bool(win.preview.item(0, 2).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
-    assert not bool(win.preview.item(0, 1).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
+    assert bool(win.preview.item(0, 3).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
+    assert not bool(win.preview.item(0, 2).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
 
     cell.setText("8/2026–5/2027")
     sheets = win.selected_sheets_for_fill()
@@ -175,7 +175,7 @@ def test_wilma_rows_edit_reorder_and_replace_mode(qtbot, config_path: Path) -> N
     ]
     win._on_wilma_rows(wilma)
     assert win.mode_replace.isChecked()
-    assert [win.preview.item(r, 1).text() for r in range(4)] == [  # type: ignore[union-attr]
+    assert [win.preview.item(r, 2).text() for r in range(4)] == [  # type: ignore[union-attr]
         "Wilma",
         "Wilma",
         "Ohjelmistokehittäjä",
@@ -184,12 +184,12 @@ def test_wilma_rows_edit_reorder_and_replace_mode(qtbot, config_path: Path) -> N
     assert win.preview_label.text().startswith("4 RIVIÄ · WILMA, OHJELMISTOKEHITTÄJÄ")
 
     # muokkaa Wilma-rivin osaamistavoitetta ja siirrä Excel-rivi ylimmäksi
-    win.preview.item(0, 2).setText("W1 muokattu")  # type: ignore[union-attr]
-    win.preview.selectRow(2)
-    win.move_current_row(-1)
-    win.move_current_row(-1)
-    assert win.preview.item(0, 2).text() == "Ohjelmointi"  # type: ignore[union-attr]
-    assert win.preview.item(1, 2).text() == "W1 muokattu"  # type: ignore[union-attr]
+    grip = win.preview.item(0, 0)
+    assert grip is not None and grip.text() == "⋮⋮"  # tarttumasarake raahaukseen
+    win.preview.item(0, 3).setText("W1 muokattu")  # type: ignore[union-attr]
+    win.move_row(2, 0)  # sama kuin raahaus riviltä 2 ylimmäksi
+    assert win.preview.item(0, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(1, 3).text() == "W1 muokattu"  # type: ignore[union-attr]
 
     sheets = win.selected_sheets_for_fill()
     assert [(s.name, [r.values["osaamistavoite"] for r in s.rows]) for s in sheets] == [
@@ -201,8 +201,8 @@ def test_wilma_rows_edit_reorder_and_replace_mode(qtbot, config_path: Path) -> N
     # järjestys ja muokkaus säilyvät, kun esikatselu rakennetaan uudelleen
     win.contact_check.setChecked(True)
     win.update_preview()
-    assert win.preview.item(0, 2).text() == "Ohjelmointi"  # type: ignore[union-attr]
-    assert win.preview.item(1, 2).text() == "W1 muokattu"  # type: ignore[union-attr]
+    assert win.preview.item(0, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(1, 3).text() == "W1 muokattu"  # type: ignore[union-attr]
 
     win.clear_wilma_rows()
     assert win.preview.rowCount() == 2

@@ -134,15 +134,18 @@ Ikkuna kulkee viidessä vaiheessa:
 4. **Esikatselu ja muokkaus.** Taulukko näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
    Jokaisen solun voi muokata kaksoisnapsauttamalla, rivin rastin voi poistaa, otsikkorivin rasti
    valitsee tai poistaa kaikki, *Aseta ajankohta valituille* kirjoittaa saman ajankohdan
-   rastitetuille, ja ▲▼ siirtävät valittua riviä. *Hae nykyiset rivit Wilmasta* lukee avoimen
+   rastitetuille. Rivin järjestystä vaihdetaan raahaamalla rivin alussa olevasta
+   tarttumasta ⋮⋮ (tai ▲▼-linkeillä). *Hae nykyiset rivit Wilmasta* lukee avoimen
    lomakkeen rivit esikatseluun lähteenä *Wilma*: näin opiskelijan olemassa olevaa suunnitelmaa
    voi järjestellä, muokata ja täydentää Excelin riveillä ilman Wilman käsityötä.
 
    ![Esikatselu muokattuna](docs/kuvat/02-esikatselu-muokattu.png)
 
 5. **Täyttö.** Valitse *Lisää lomakkeen loppuun* tai *Korvaa lomakkeen nykyiset rivit* (oletus,
-   kun rivit on haettu Wilmasta: poistaa lomakkeen rivit poistonapilla ja kirjoittaa esikatselun
-   rivit tilalle) ja paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä*
+   kun rivit on haettu Wilmasta) ja paina **Täytä lomake**. Korvaus kirjoittaa esikatselun rivit
+   lomakkeen nykyisten rivien päälle järjestyksessä: Wilman tallennettuja rivejä ei voi poistaa
+   napilla, joten ne tyhjennetään ja täytetään uudelleen, ylijäävät jäävät tyhjiksi ja uusia
+   lisätään vain tarvittaessa. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä*
    pysäyttää rivin jälkeen.
 
    ![Täyttö käynnissä](docs/kuvat/03-taytto.png)
@@ -239,7 +242,7 @@ Kaikki avaimet ovat valinnaisia; puuttuvat täydennetään oletuksilla.
   "selectors": {
     "table_body": "table:has(th:has-text(\"Osaamistavoite\")) tbody",  // vain opintotaulukko
     "add_row_button": "[id$='__add']",
-    "remove_row_button": "td:last-child button, td:last-child a, [id$='__remove']",  // korvaustilan poistonappi
+    "remove_row_button": "td:last-child button, td:last-child a, [id$='__remove']",  // poistonappi (vain samalla latauksella lisätyillä riveillä)
     "field_cells": {
       "osaamistavoite": "td:nth-child(1)",
       "laajuus": "td:nth-child(2)",

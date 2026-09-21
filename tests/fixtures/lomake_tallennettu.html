@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fi">
+<head><meta charset="utf-8"><title>Testilomake – tallennettu opiskelusuunnitelma</title></head>
+<body>
+<!-- Jäljittelee Wilman tallennettua lomaketta: palvelimen piirtämillä riveillä on vain
+     neljä solua eikä poistonappia; vasta samalla sivulatauksella lisätyt rivit saavat
+     viidennen solun ja poistonapin. Lisäysnappi on tfoot-osassa. -->
+<main>
+  <form class="form-common dock" action="/forms/42/">
+    <table class="table table-condensed">
+      <thead>
+        <tr>
+          <th>Osaamistavoite / tutkinnon osa</th>
+          <th>Laajuus (osp)</th>
+          <th>Suoritustapa / osaaminen hankitaan</th>
+          <th>Suoritusajankohta</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        <tr>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-0-pfield9700" value="Vanha 1"></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-0-pfield9704" value="10"></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-0-pfield9792" value="Lähi"></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-0-pfield9703" value="2025"></td>
+        </tr>
+        <tr>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-1-pfield9700" value="Vanha 2"></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-1-pfield9704" value="20"></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-1-pfield9792" value="Verkko"></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-1-pfield9703" value="2026"></td>
+        </tr>
+        <tr>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-2-pfield9700" value="Vanha 3"></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-2-pfield9704" value="30"></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-2-pfield9792" value=""></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-2-pfield9703" value=""></td>
+        </tr>
+        <tr>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-3-pfield9700" value=""></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-3-pfield9704" value=""></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-3-pfield9792" value=""></td>
+          <td><input class="form-control text-field" type="text" name="prepeater9700-3-pfield9703" value=""></td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr><td colspan="4"><button type="button" class="btn" id="f-prepeater9700__add">Lisää rivi</button></td></tr>
+      </tfoot>
+    </table>
+    <input type="hidden" name="prepeater9700__count" id="count" value="4">
+    <input type="hidden" name="prepeater9700__removed" value="">
+
+    <table class="table table-condensed">
+      <thead><tr><th>Pvm</th><th>Päivittäjä</th></tr></thead>
+      <tbody id="meta-rows">
+        <tr><td><input class="form-control" type="text" name="prepeater2153-0-pfield2153"></td><td><input class="form-control" type="text" name="prepeater2153-0-pfield2154"></td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td colspan="2"><button type="button" class="btn" id="f-prepeater2153__add">Lisää rivi</button></td></tr>
+      </tfoot>
+    </table>
+  </form>
+</main>
+<script>
+  document.getElementById('f-prepeater9700__add').addEventListener('click', () => {
+    setTimeout(() => {
+      const count = document.getElementById('count');
+      const n = parseInt(count.value, 10);
+      const tr = document.createElement('tr');
+      for (const f of ['9700', '9704', '9792', '9703']) {
+        const td = document.createElement('td');
+        const input = document.createElement('input');
+        input.type = 'text'; input.className = 'form-control text-field';
+        input.name = `prepeater9700-${n}-pfield${f}`;
+        td.appendChild(input); tr.appendChild(td);
+      }
+      const last = document.createElement('td');
+      const rm = document.createElement('button'); rm.type = 'button';
+      rm.id = `f-prepeater9700-${n}__remove`; rm.className = 'btn btn-default';
+      rm.addEventListener('click', () => tr.remove());
+      last.appendChild(rm); tr.appendChild(last);
+      document.getElementById('rows').appendChild(tr);
+      count.value = String(n + 1);
+    }, 50);
+  });
+</script>
+</body>
+</html>

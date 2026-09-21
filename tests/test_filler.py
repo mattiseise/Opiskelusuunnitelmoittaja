@@ -151,3 +151,51 @@ def test_read_rows_and_clear_rows(page: Page, lomake_url: str) -> None:
     # tyhjennetty rivi käytetään uudelleen
     clearer.fill_new_row(_row("B1", "9"))
     assert _table_values(page)[0][0] == "B1" and len(_table_values(page)) == 1
+
+
+def test_saved_form_append_uses_trailing_empty_row(page: Page, tallennettu_url: str) -> None:
+    """Lisäystila tallennetulla lomakkeella: vanhat rivit säilyvät, tyhjä viimeinen käytetään."""
+    page.goto(tallennettu_url)
+    filler = FormFiller(page, CFG)
+    filler.fill_new_row(_row("Uusi 1", "5"))
+    filler.fill_new_row(_row("Uusi 2", "6"))
+    values = _table_values(page)
+    assert [v[0] for v in values] == ["Vanha 1", "Vanha 2", "Vanha 3", "Uusi 1", "Uusi 2"]
+    assert page.locator("#count").input_value() == "5"
+    assert _table_values(page, "#meta-rows") == [["", ""]]
+
+
+def test_saved_form_replace_overwrites_in_place(page: Page, tallennettu_url: str) -> None:
+    """Korvaustila: tallennettuja rivejä ei voi poistaa → tyhjennetään ja kirjoitetaan yli."""
+    page.goto(tallennettu_url)
+    rows = FormFiller(page, CFG).read_rows()
+    assert [r.values["osaamistavoite"] for r in rows] == ["Vanha 1", "Vanha 2", "Vanha 3"]
+
+    filler = FormFiller(page, CFG)
+    assert filler.clear_rows() == 0  # mitään ei voitu poistaa napilla
+    assert _table_values(page) == [[""] * 4] * 4
+
+    filler.fill_new_row(_row("A", "1"))
+    filler.fill_new_row(_row("B", "2"))
+    assert [v[0] for v in _table_values(page)] == ["A", "B", "", ""]
+
+    # tyhjät loppuvat → lisäysnappi
+    filler.fill_new_row(_row("C", "3"))
+    filler.fill_new_row(_row("D", "4"))
+    filler.fill_new_row(_row("E", "5"))
+    assert [v[0] for v in _table_values(page)] == ["A", "B", "C", "D", "E"]
+    assert page.locator("#count").input_value() == "5"
+
+    # toinen korvaus samalla sivulla: lisätty rivi E poistetaan napilla, loput tyhjennetään
+    second = FormFiller(page, CFG)
+    assert second.clear_rows() == 1
+    assert [v[0] for v in _table_values(page)] == ["", "", "", ""]
+
+
+def test_saved_form_replace_with_separator(page: Page, tallennettu_url: str) -> None:
+    """Välirivi kuluttaa korvaustilassa tyhjän rivin eikä lisää uutta."""
+    page.goto(tallennettu_url)
+    filler = FormFiller(page, CFG)
+    filler.clear_rows()
+    filler.process_sheets([Sheet("A", [_row("A1", "1")]), Sheet("B", [_row("B1", "2")])])
+    assert [v[0] for v in _table_values(page)] == ["A1", "", "B1", ""]

@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Slot
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtGui import QAction, QCloseEvent, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
-    QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
@@ -45,13 +44,17 @@ from ..excel import ExcelError, PlanRow, Sheet, list_sheets, read_sheet
 from ..filler import Summary
 from ..logsetup import setup_logging
 from . import theme
+from .preview_table import GRIP, GripDelegate, PreviewTable
 from .settings_dialog import SettingsDialog
 from .worker import FillWorker, QtLogHandler, ReadWorker
 
 log = logging.getLogger("suunnitelmoittaja.gui")
 TIME_FIELD = "suoritusajankohta"
 WILMA_SHEET = "Wilma"
-FIELD_COLUMN_OFFSET = 2  # 0 = rasti, 1 = välilehti, 2… = kentät
+GRIP_COL = 0  # tarttuma raahaukseen
+CHECK_COL = 1
+SOURCE_COL = 2
+FIELD_COLUMN_OFFSET = 3  # 3… = kentät
 
 
 @dataclass
@@ -347,19 +350,25 @@ class MainWindow(QMainWindow):
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         step4.addWidget(self.preview_label)
         right_layout.addLayout(step4)
-        self.preview = QTableWidget(0, 6)
+        self.preview = PreviewTable(0, 7)
         self.preview.setHorizontalHeaderLabels(
-            ["", "Lähde", "Osaamistavoite", "Laajuus", "Suoritustapa", "Ajankohta"]
+            ["", "", "Lähde", "Osaamistavoite", "Laajuus", "Suoritustapa", "Ajankohta"]
         )
+        self.preview.row_moved.connect(self.move_row)
         hh = self.preview.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        hh.resizeSection(0, 36)
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setMinimumSectionSize(36)
+        hh.setSectionResizeMode(GRIP_COL, QHeaderView.ResizeMode.Fixed)
+        hh.resizeSection(GRIP_COL, 28)
+        self.preview.setItemDelegateForColumn(
+            GRIP_COL, GripDelegate(theme.TOKENS["gold"], self.preview)
+        )
+        hh.setSectionResizeMode(CHECK_COL, QHeaderView.ResizeMode.Fixed)
+        hh.resizeSection(CHECK_COL, 36)
+        hh.setSectionResizeMode(SOURCE_COL, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setMinimumSectionSize(28)
         self.preview.itemChanged.connect(self._on_preview_item_changed)
         # "Valitse kaikki / poista valinnat" -rasti otsikkorivin tyhjässä solussa
         self.header_check = QCheckBox(hh)
@@ -618,16 +627,35 @@ class MainWindow(QMainWindow):
         for row in self._preview_rows:
             r = self.preview.rowCount()
             self.preview.insertRow(r)
+            grip = QTableWidgetItem(GRIP)
+            grip.setFlags(
+                Qt.ItemFlag.ItemIsEnabled
+                | Qt.ItemFlag.ItemIsSelectable
+                | Qt.ItemFlag.ItemIsDragEnabled
+            )
+            grip.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            grip.setForeground(QColor(theme.TOKENS["gold"]))
+            grip.setToolTip("Raahaa riviä uuteen paikkaan")
+            self.preview.setItem(r, GRIP_COL, grip)
             check = QTableWidgetItem()
-            check.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+            check.setFlags(
+                Qt.ItemFlag.ItemIsUserCheckable
+                | Qt.ItemFlag.ItemIsEnabled
+                | Qt.ItemFlag.ItemIsSelectable
+                | Qt.ItemFlag.ItemIsDragEnabled
+            )
             check.setCheckState(Qt.CheckState.Checked if row.checked else Qt.CheckState.Unchecked)
-            self.preview.setItem(r, 0, check)
+            self.preview.setItem(r, CHECK_COL, check)
             src = QTableWidgetItem(row.sheet)
-            src.setFlags(src.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.preview.setItem(r, 1, src)
+            src.setFlags(
+                (src.flags() & ~Qt.ItemFlag.ItemIsEditable) | Qt.ItemFlag.ItemIsDragEnabled
+            )
+            self.preview.setItem(r, SOURCE_COL, src)
             for col, field in enumerate(fields[:4], start=FIELD_COLUMN_OFFSET):
                 item = QTableWidgetItem(row.values.get(field, ""))
-                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+                item.setFlags(
+                    item.flags() | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDragEnabled
+                )
                 item.setToolTip("Kaksoisnapsauta muokataksesi")
                 self.preview.setItem(r, col, item)
         self.preview.blockSignals(False)
@@ -636,7 +664,7 @@ class MainWindow(QMainWindow):
         return [
             r
             for r in range(self.preview.rowCount())
-            if (item := self.preview.item(r, 0)) is not None
+            if (item := self.preview.item(r, CHECK_COL)) is not None
             and item.checkState() == Qt.CheckState.Checked
         ]
 
@@ -695,14 +723,18 @@ class MainWindow(QMainWindow):
 
     def move_current_row(self, delta: int) -> None:
         r = self.preview.currentRow()
-        target = r + delta
-        if r < 0 or not 0 <= target < len(self._preview_rows):
-            return
+        self.move_row(r, r + delta)
+
+    def move_row(self, src: int, dst: int) -> None:
+        """Siirrä rivi paikasta src paikkaan dst (raahaus tai ▲▼)."""
         rows = self._preview_rows
-        rows[r], rows[target] = rows[target], rows[r]
-        self._order = [row.key for row in rows]
+        if src < 0 or not 0 <= dst < len(rows) or src == dst:
+            return
+        row = rows.pop(src)
+        rows.insert(dst, row)
+        self._order = [r.key for r in rows]
         self._render_preview()
-        self.preview.selectRow(target)
+        self.preview.selectRow(dst)
         self._refresh_preview_summary(self.selected_sheet_names())
 
     def read_from_wilma(self) -> None:
@@ -759,7 +791,7 @@ class MainWindow(QMainWindow):
         state = Qt.CheckState.Unchecked if all_checked else Qt.CheckState.Checked
         self.preview.blockSignals(True)
         for r in range(self.preview.rowCount()):
-            item = self.preview.item(r, 0)
+            item = self.preview.item(r, CHECK_COL)
             if item is not None:
                 item.setCheckState(state)
             row = self._preview_rows[r]
@@ -775,7 +807,7 @@ class MainWindow(QMainWindow):
         r = item.row()
         if not 0 <= r < len(self._preview_rows):
             return
-        if item.column() == 0:
+        if item.column() == CHECK_COL:
             row = self._preview_rows[r]
             row.checked = item.checkState() == Qt.CheckState.Checked
             if row.checked:
@@ -808,11 +840,11 @@ class MainWindow(QMainWindow):
 
     def _place_header_check(self) -> None:
         hh = self.preview.horizontalHeader()
-        w = hh.sectionSize(0)
+        w = hh.sectionSize(CHECK_COL)
         h = hh.height()
         size = self.header_check.sizeHint()
         self.header_check.move(
-            hh.sectionViewportPosition(0) + max(0, (w - size.width()) // 2),
+            hh.sectionViewportPosition(CHECK_COL) + max(0, (w - size.width()) // 2),
             max(0, (h - size.height()) // 2),
         )
         self.header_check.raise_()
@@ -880,7 +912,8 @@ class MainWindow(QMainWindow):
             return
         replace_existing = self.mode_replace.isChecked()
         mode_text = (
-            "Lomakkeen nykyiset rivit POISTETAAN ja tilalle kirjoitetaan esikatselun rivit."
+            "Lomakkeen nykyiset rivit KORVATAAN esikatselun riveillä (tallennetut rivit "
+            "kirjoitetaan yli paikallaan, ylijäävät jäävät tyhjiksi)."
             if replace_existing
             else "Rivit lisätään lomakkeen loppuun."
         )

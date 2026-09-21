@@ -58,6 +58,10 @@ class FormFiller:
 
     Toimintaperiaate per datarivi: paina "lisää rivi" → odota että rivimäärä kasvaa →
     täytä uusimman rivin solut. Näin täyttö ei nojaa absoluuttisiin rivinumeroihin.
+
+    Wilmassa tallennetuilla riveillä ei ole poistonappia (vain samalla sivulatauksella
+    lisätyillä on), joten korvaustilassa (``clear_rows``) rivit tyhjennetään ja
+    kirjoitetaan yli paikallaan; uusia rivejä lisätään vain, kun tyhjät loppuvat.
     """
 
     def __init__(
@@ -77,6 +81,10 @@ class FormFiller:
         self._progress = progress or (lambda _msg: None)
         self._stop_requested = stop_requested or (lambda: False)
         self.selectors = config.selectors
+        # Tyhjien rivien uudelleenkäyttö: lisäystilassa vain taulukon viimeinen valmis
+        # tyhjä rivi (kerran); korvaustilassa kaikki tyhjennetyt rivit järjestyksessä.
+        self._reuse_all = False
+        self._next_reusable = 0
         self._first_row_done = False
         self._warned_multiple = False
         if page is not None:
@@ -119,10 +127,11 @@ class FormFiller:
         return rows
 
     def clear_rows(self) -> int:
-        """Poista lomakkeen kaikki rivit poistonapilla; palauttaa poistettujen määrän.
+        """Tyhjennä lomake korvaustäyttöä varten; palauttaa poistettujen rivien määrän.
 
-        Viimeistä riviä ei voi Wilmassa poistaa (siinä ei ole poistonappia), joten sen
-        kentät tyhjennetään ja se käytetään ensimmäiselle uudelle riville.
+        Rivit, joissa on poistonappi (samalla sivulatauksella lisätyt), poistetaan.
+        Tallennetut rivit eivät Wilmassa ole poistettavissa, joten niiden kentät
+        tyhjennetään ja ne täytetään uudelleen järjestyksessä; ylijäävät jäävät tyhjiksi.
         """
         if self.dry_run:
             log.info("[kuiva-ajo] rivien poisto")
@@ -157,6 +166,8 @@ class FormFiller:
                 )
                 if control.count() > 0:
                     control.fill("")
+        self._reuse_all = True
+        self._next_reusable = 0
         self._first_row_done = False
         log.info("Poistettiin %d riviä, %d tyhjennettiin", removed, rows.count())
         return removed
@@ -191,13 +202,13 @@ class FormFiller:
     def fill_new_row(self, row: PlanRow) -> None:
         """Täytä seuraava rivi. Nostaa poikkeuksen, jos jokin kenttä ei täyty.
 
-        Ensimmäisellä kerralla käytetään taulukossa valmiina olevaa tyhjää riviä, jos
-        sellainen on; muuten painetaan lisäysnappia.
+        Ensin käytetään taulukossa valmiina oleva tyhjä rivi (lisäystilassa viimeinen,
+        korvaustilassa kaikki tyhjennetyt järjestyksessä); muuten painetaan lisäysnappia.
         """
         if self.dry_run:
             log.info("[kuiva-ajo] uusi rivi: %s", row.values)
             return
-        table_row = self._reuse_trailing_empty_row() or self.add_table_row()
+        table_row = self._next_empty_row() or self.add_table_row()
         failures: list[str] = []
         for field_name in self.config.field_names:
             value = row.values.get(field_name, "")
@@ -256,23 +267,33 @@ class FormFiller:
                 return candidate.first
         return self.page.locator(sel).first
 
-    def _reuse_trailing_empty_row(self) -> Locator | None:
-        """Palauta taulukon viimeinen rivi, jos sitä ei ole vielä käytetty ja se on tyhjä."""
-        if self._first_row_done:
+    def _next_empty_row(self) -> Locator | None:
+        """Seuraava uudelleenkäytettävä tyhjä rivi tai None, jos sellaista ei ole."""
+        rows = self._rows()
+        count = rows.count()
+        if self._reuse_all:
+            for i in range(self._next_reusable, count):
+                if self._row_is_empty(rows.nth(i)):
+                    self._next_reusable = i + 1
+                    return rows.nth(i)
+            self._reuse_all = False  # tyhjät loppuivat → jatketaan lisäysnapilla
+            self._first_row_done = True
+            return None
+        if self._first_row_done or count == 0:
             return None
         self._first_row_done = True
-        rows = self._rows()
-        if rows.count() == 0:
-            return None
-        last = rows.nth(rows.count() - 1)
-        controls = last.locator(self.selectors.input_in_cell)
-        if controls.count() < len(self.config.field_names):
-            return None
-        values = controls.evaluate_all("els => els.map(e => (e.value || '').trim())")
-        if all(v == "" for v in values):
+        last = rows.nth(count - 1)
+        if self._row_is_empty(last):
             log.info("Käytetään taulukossa valmiina olevaa tyhjää riviä")
             return last
         return None
+
+    def _row_is_empty(self, table_row: Locator) -> bool:
+        controls = table_row.locator(self.selectors.input_in_cell)
+        if controls.count() < len(self.config.field_names):
+            return False
+        values = controls.evaluate_all("els => els.map(e => (e.value || '').trim())")
+        return all(v == "" for v in values)
 
     def _fill_cell(self, table_row: Locator, field_name: str, value: str) -> None:
         cell_selector = self.selectors.field_cells.get(field_name)
@@ -299,7 +320,8 @@ class FormFiller:
             log.info("[kuiva-ajo] välirivi välilehden '%s' jälkeen", after_sheet)
             return
         try:
-            self.add_table_row()
+            if self._next_empty_row() is None:
+                self.add_table_row()
             log.info("Lisätty tyhjä välirivi välilehden '%s' jälkeen", after_sheet)
         except Exception as exc:
             log.warning("Väliriviä ei voitu lisätä: %s", exc)
