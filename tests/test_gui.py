@@ -66,8 +66,8 @@ def test_main_window_builds_selection_from_wizard(qtbot, config_path: Path) -> N
     # Rikki-välilehdeltä puuttuu sarakkeita → esikatselussa vain pääsuuntaus
     assert win.selected_sheet_names() == ["Ohjelmistokehittäjä", "Rikki"]
     assert win.preview.rowCount() == 2
-    assert win.preview.item(0, 2).text() == "Ohjelmointi"  # type: ignore[union-attr]
-    assert win.preview.item(0, 3).text() == "45"  # type: ignore[union-attr]
+    assert win.preview.item(0, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(0, 4).text() == "45"  # type: ignore[union-attr]
 
     boxes[0].setChecked(False)
     win.main_group.buttons()[1].setChecked(True)
@@ -95,7 +95,7 @@ def test_preview_row_checkboxes_and_toggle(qtbot, config_path: Path) -> None:
     assert win.checked_row_indices() == [0, 1]
     assert win.header_check.checkState() == Qt.CheckState.Checked
 
-    win.preview.item(1, 0).setCheckState(Qt.CheckState.Unchecked)  # type: ignore[union-attr]
+    win.preview.item(1, 1).setCheckState(Qt.CheckState.Unchecked)  # type: ignore[union-attr]
     assert win.checked_row_indices() == [0]
     assert win.preview_label.text().startswith("1 / 2 RIVIÄ")
     assert win.header_check.checkState() == Qt.CheckState.PartiallyChecked
@@ -127,11 +127,11 @@ def test_contact_row_in_preview_and_settings(qtbot, config_path: Path) -> None:
 
     assert win.contact_check.isEnabled() and win.contact_check.isChecked()
     assert win.preview.rowCount() == 3
-    last = win.preview.item(2, 2).text()  # type: ignore[union-attr]
+    last = win.preview.item(2, 3).text()  # type: ignore[union-attr]
     assert last.startswith("Opiskelijalla on henkilökohtainen opintosuunnitelma")
     assert "Matti Seise, sähköposti: matti.seise@bc.fi tai puhelimitse: 041 534 5404" in last
-    assert win.preview.item(2, 1).text() == "Yhteystiedot"  # type: ignore[union-attr]
-    assert win.preview.item(2, 3).text() == ""  # type: ignore[union-attr]
+    assert win.preview.item(2, 2).text() == "Yhteystiedot"  # type: ignore[union-attr]
+    assert win.preview.item(2, 4).text() == ""  # type: ignore[union-attr]
     sheets = win.selected_sheets_for_fill()
     assert [s.name for s in sheets][-1] == "Yhteystiedot"
 
@@ -143,9 +143,10 @@ def test_time_column_editable_and_applied(qtbot, config_path: Path) -> None:
     win = MainWindow(config_path)
     qtbot.addWidget(win)
     col = win._time_column()
-    assert col == 5
+    assert col == 6
     cell = win.preview.item(0, col)
     assert cell is not None and bool(cell.flags() & Qt.ItemFlag.ItemIsEditable)
+    assert bool(win.preview.item(0, 3).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
     assert not bool(win.preview.item(0, 2).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
 
     cell.setText("8/2026–5/2027")
@@ -159,73 +160,63 @@ def test_time_column_editable_and_applied(qtbot, config_path: Path) -> None:
     assert win.preview.item(0, col).text() == "8/2026–5/2027"  # type: ignore[union-attr]
 
 
-def test_fill_mode_radios_default_hint_and_persistence(qtbot, config_path: Path) -> None:
-    from opiskelusuunnitelmoittaja.fillmode import FillMode
+def test_wilma_rows_edit_reorder_and_replace_mode(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.excel import PlanRow
 
     win = MainWindow(config_path)
     qtbot.addWidget(win)
-    assert [rb.text() for rb in win.mode_buttons.values()] == [
-        "Lisää loppuun",
-        "Korvaa olemassa oleva opintosuunnitelma",
-        "Täydennä puuttuvat",
+    assert win.mode_append.isChecked()
+    assert win.preview.rowCount() == 2  # Excel: Ohjelmointi, Tietoturva
+
+    wilma = [
+        PlanRow(
+            {"osaamistavoite": "W1", "laajuus": "5", "suoritustapa": "x", "suoritusajankohta": ""}
+        ),
+        PlanRow(
+            {"osaamistavoite": "W2", "laajuus": "6", "suoritustapa": "y", "suoritusajankohta": ""}
+        ),
     ]
-    assert win.selected_fill_mode() is FillMode.APPEND  # config.jsonin oletus
-    assert win.mode_hint.text() == FillMode.APPEND.description
+    win._on_wilma_rows(wilma)
+    assert win.mode_replace.isChecked()
+    assert [win.preview.item(r, 2).text() for r in range(4)] == [  # type: ignore[union-attr]
+        "Wilma",
+        "Wilma",
+        "Ohjelmistokehittäjä",
+        "Ohjelmistokehittäjä",
+    ]  # type: ignore[union-attr]
+    assert win.preview_label.text().startswith("4 RIVIÄ · WILMA, OHJELMISTOKEHITTÄJÄ")
 
-    win.mode_buttons[FillMode.COMPLETE].setChecked(True)
-    assert win.selected_fill_mode() is FillMode.COMPLETE
-    assert win.mode_hint.text() == FillMode.COMPLETE.description
-    assert win.settings.value("fill_mode") == "complete"
+    # muokkaa Wilma-rivin osaamistavoitetta ja siirrä Excel-rivi ylimmäksi
+    grip = win.preview.item(0, 0)
+    assert grip is not None and grip.text() == "⋮⋮"  # tarttumasarake raahaukseen
+    win.preview.item(0, 3).setText("W1 muokattu")  # type: ignore[union-attr]
+    win.move_row(2, 0)  # sama kuin raahaus riviltä 2 ylimmäksi
+    assert win.preview.item(0, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(1, 3).text() == "W1 muokattu"  # type: ignore[union-attr]
 
-    # valinta säilyy uuteen ikkunaan (QSettings) ja voittaa configin oletuksen
-    win2 = MainWindow(config_path)
-    qtbot.addWidget(win2)
-    assert win2.selected_fill_mode() is FillMode.COMPLETE
+    sheets = win.selected_sheets_for_fill()
+    assert [(s.name, [r.values["osaamistavoite"] for r in s.rows]) for s in sheets] == [
+        ("Ohjelmistokehittäjä", ["Ohjelmointi"]),
+        ("Wilma", ["W1 muokattu", "W2"]),
+        ("Ohjelmistokehittäjä", ["Tietoturva"]),
+    ]
 
+    # järjestys ja muokkaus säilyvät, kun esikatselu rakennetaan uudelleen
+    win.contact_check.setChecked(True)
+    win.update_preview()
+    assert win.preview.item(0, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(1, 3).text() == "W1 muokattu"  # type: ignore[union-attr]
 
-def test_open_excel_button(qtbot, config_path: Path, monkeypatch, tmp_path: Path) -> None:
-    win = MainWindow(config_path)
-    qtbot.addWidget(win)
-    assert win.btn_open_excel.text() == "Avaa Excel"
-    opened: list[Path] = []
-    monkeypatch.setattr(win, "_open_path", opened.append)
-    win.open_excel()
-    assert opened == [win.excel_path]
-
-    # puuttuva tiedosto → ilmoitus, ei avausta
-    win.excel_path = tmp_path / "ei-ole.xlsx"
-    shown: list[str] = []
-    monkeypatch.setattr(
-        "opiskelusuunnitelmoittaja.gui.main_window.QMessageBox.information",
-        lambda *a, **k: shown.append(a[1]),
-    )
-    win.open_excel()
-    assert len(opened) == 1  # ei uutta avausta
-    assert shown and "Excel ei löydy" in shown[0]
+    win.clear_wilma_rows()
+    assert win.preview.rowCount() == 2
 
 
-def test_settings_dialog_fill_mode_roundtrip(qtbot, config_path: Path) -> None:
-    from opiskelusuunnitelmoittaja.fillmode import FillMode
-
+def test_fill_worker_replace_mode_clears_first(qtbot, config_path: Path, excel_file: Path) -> None:
+    """replace_existing kulkee workerille (oikea selain testataan test_filler:ssä)."""
     config = load_config(config_path)
-    dialog = SettingsDialog(config, config_path)
-    qtbot.addWidget(dialog)
-    assert dialog.fill_mode.currentData() == "append"
-    dialog.fill_mode.setCurrentIndex(list(FillMode).index(FillMode.REPLACE))
-    dialog.remove_row_button.setText("[id$='__del']")
-    dialog.key_field.setCurrentText("suoritustapa")
-    dialog.save()
-
-    saved = load_config(config_path)
-    assert saved.fill_mode is FillMode.REPLACE
-    assert saved.selectors.remove_row_button == "[id$='__del']"
-    assert saved.key_field == "suoritustapa"
-
-    win = MainWindow(config_path)
-    qtbot.addWidget(win)
-    win.settings.remove("fill_mode")
-    win.reload_config()
-    assert win.selected_fill_mode() is FillMode.REPLACE
+    sheets = [read_sheet(excel_file, "Kyber", config.excel_columns)]
+    worker = FillWorker(config, sheets, replace_existing=True)
+    assert worker.replace_existing is True
 
 
 def test_settings_dialog_opens_teacher_tab_first(qtbot, config_path: Path) -> None:
@@ -295,3 +286,89 @@ def test_fill_worker_reports_missing_chrome(qtbot, config_path: Path, excel_file
         worker.start()
     assert "Chrome ei vastaa" in blocker.args[0]
     worker.wait(2000)
+
+
+# --- täyttötapa, Avaa Excel, asetukset ------------------------------------------
+
+
+def test_fill_mode_radios_default_hint_and_persistence(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.fillmode import FillMode
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert [rb.text() for rb in win.mode_buttons.values()] == [
+        "Lisää lomakkeen loppuun",
+        "Korvaa lomakkeen nykyiset rivit",
+        "Täydennä puuttuvat",
+    ]
+    assert win.selected_fill_mode() is FillMode.APPEND  # config.jsonin oletus
+    assert win.mode_hint.text() == FillMode.APPEND.description
+
+    win.mode_complete.setChecked(True)
+    assert win.selected_fill_mode() is FillMode.COMPLETE
+    assert win.mode_hint.text() == FillMode.COMPLETE.description
+    assert win.settings.value("fill_mode") == "complete"
+
+    # valinta säilyy uuteen ikkunaan (QSettings) ja voittaa configin oletuksen
+    win2 = MainWindow(config_path)
+    qtbot.addWidget(win2)
+    assert win2.selected_fill_mode() is FillMode.COMPLETE
+
+
+def test_open_excel_button(qtbot, config_path: Path, monkeypatch, tmp_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert win.btn_open_excel.text() == "Avaa Excel"
+    opened: list[Path] = []
+    monkeypatch.setattr(win, "_open_path", opened.append)
+    win.open_excel()
+    assert opened == [win.excel_path]
+
+    # puuttuva tiedosto → ilmoitus, ei avausta
+    win.excel_path = tmp_path / "ei-ole.xlsx"
+    shown: list[str] = []
+    monkeypatch.setattr(
+        "opiskelusuunnitelmoittaja.gui.main_window.QMessageBox.information",
+        lambda *a, **k: shown.append(a[1]),
+    )
+    win.open_excel()
+    assert len(opened) == 1  # ei uutta avausta
+    assert shown and "Excel ei löydy" in shown[0]
+
+
+def test_settings_dialog_fill_mode_roundtrip(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.fillmode import FillMode
+
+    config = load_config(config_path)
+    dialog = SettingsDialog(config, config_path)
+    qtbot.addWidget(dialog)
+    assert dialog.fill_mode.currentData() == "append"
+    dialog.fill_mode.setCurrentIndex(list(FillMode).index(FillMode.REPLACE))
+    dialog.remove_row_button.setText("[id$='__del']")
+    dialog.key_field.setCurrentText("suoritustapa")
+    dialog.save()
+
+    saved = load_config(config_path)
+    assert saved.fill_mode is FillMode.REPLACE
+    assert saved.selectors.remove_row_button == "[id$='__del']"
+    assert saved.key_field == "suoritustapa"
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.settings.remove("fill_mode")
+    win.reload_config()
+    assert win.selected_fill_mode() is FillMode.REPLACE
+
+
+def test_fill_worker_mode_from_flag_and_config(qtbot, config_path: Path, excel_file: Path) -> None:
+    from dataclasses import replace
+
+    from opiskelusuunnitelmoittaja.fillmode import FillMode
+
+    config = load_config(config_path)
+    sheets = [read_sheet(excel_file, "Kyber", config.excel_columns)]
+    assert FillWorker(config, sheets).mode is FillMode.APPEND
+    assert FillWorker(config, sheets, replace_existing=True).mode is FillMode.REPLACE
+    assert FillWorker(config, sheets, mode=FillMode.COMPLETE).mode is FillMode.COMPLETE
+    cfg = replace(config, fill_mode=FillMode.COMPLETE)
+    assert FillWorker(cfg, sheets).mode is FillMode.COMPLETE

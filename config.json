@@ -20,7 +20,7 @@
       "suoritusajankohta": "td:nth-child(4)"
     },
     "input_in_cell": "input, textarea, select",
-    "remove_row_button": "[id$='__remove']"
+    "remove_row_button": "td:last-child button, td:last-child a, [id$='__remove']"
   },
   "excel_columns": {
     "osaamistavoite": "Osaamistavoite",

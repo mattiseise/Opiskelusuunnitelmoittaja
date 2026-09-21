@@ -36,8 +36,8 @@ class SheetResult:
 class Summary:
     sheets: list[SheetResult]
     mode: FillMode = FillMode.APPEND
-    removed_rows: int = 0  # korvaustilassa poistetut ylimääräiset rivit
-    cleared_rows: int = 0  # korvaustilassa tyhjennetyt ylimääräiset rivit (ei poistonappia)
+    removed_rows: int = 0  # korvaustilassa poistonapilla poistetut rivit
+    cleared_rows: int = 0  # korvaustilassa tyhjiksi jääneet rivit (Wilmassa käsin poistettavat)
 
     @property
     def total_rows(self) -> int:
@@ -73,8 +73,9 @@ class FormFiller:
     Täyttötapa (``mode``) määrää, miten lomakkeella jo oleviin riveihin suhtaudutaan:
 
     * APPEND – nykyisiin riveihin ei kosketa, uudet tulevat perään (valmis tyhjä rivi käytetään).
-    * REPLACE – nykyiset rivit kirjoitetaan yli järjestyksessä; ylimääräiset poistetaan
-      (``selectors.remove_row_button``) tai tyhjennetään.
+    * REPLACE – ``clear_rows`` ensin: samalla sivulatauksella lisätyt rivit poistetaan napilla,
+      Wilmassa tallennetut tyhjennetään (niillä ei ole poistonappia) ja kirjoitetaan yli
+      paikallaan; uusia rivejä lisätään vain, kun tyhjät loppuvat. Ylijäävät jäävät tyhjiksi.
     * COMPLETE – vain rivit, joiden avainkenttää (``key_field``) ei vielä ole lomakkeella,
       lisätään perään.
     """
@@ -95,14 +96,17 @@ class FormFiller:
         self.config = config
         self.dry_run = dry_run
         self.mode = mode if mode is not None else config.fill_mode
+        self.removed_rows = 0  # clear_rows: napilla poistetut
+        self._cleared = False
         self._progress = progress or (lambda _msg: None)
         self._stop_requested = stop_requested or (lambda: False)
         self.selectors = config.selectors
+        # Tyhjien rivien uudelleenkäyttö: lisäystilassa vain taulukon viimeinen valmis
+        # tyhjä rivi (kerran); korvaustilassa kaikki tyhjennetyt rivit järjestyksessä.
+        self._reuse_all = False
+        self._next_reusable = 0
         self._first_row_done = False
         self._warned_multiple = False
-        # korvaustila: montako riviä lomakkeella oli alussa ja mihin asti ne on kirjoitettu yli
-        self._existing_total: int | None = None
-        self._next_existing = 0
         if page is not None:
             page.set_default_timeout(config.browser.timeout_ms)
 
@@ -113,8 +117,8 @@ class FormFiller:
         log.info("Täyttötapa: %s", self.mode.label)
         if self.mode is FillMode.COMPLETE:
             sheets, results = self._drop_existing_rows(sheets)
-        if self.mode is FillMode.REPLACE:
-            self._begin_replace()
+        if self.mode is FillMode.REPLACE and not self._cleared:
+            self.clear_rows()
 
         to_fill = [s for s in sheets if s.rows]
         for i, sheet in enumerate(to_fill):
@@ -133,163 +137,104 @@ class FormFiller:
             if self.config.separator_row_between_sheets and i < len(to_fill) - 1:
                 self._add_separator_row(sheet.name)
 
-        summary = Summary(results, mode=self.mode)
-        if self.mode is FillMode.REPLACE and not self._stop_requested():
-            summary.removed_rows, summary.cleared_rows = self._finish_replace()
+        summary = Summary(results, mode=self.mode, removed_rows=self.removed_rows)
+        if self._cleared and not self.dry_run:
+            summary.cleared_rows = self._trailing_empty_rows()
+            if summary.cleared_rows:
+                log.warning(
+                    "Lomakkeen loppuun jäi %d tyhjää riviä (Wilmassa tallennettuja rivejä ei "
+                    "voi poistaa napilla). Poista ne Wilmassa käsin ennen tallennusta.",
+                    summary.cleared_rows,
+                )
         return summary
 
-    def process_sheet(self, sheet: Sheet) -> SheetResult:
-        result = SheetResult(sheet.name, len(sheet.rows))
-        log.info("Aloitetaan välilehti '%s' (%d riviä)", sheet.name, len(sheet.rows))
-        for n, row in enumerate(sheet.rows, start=1):
-            if self._stop_requested():
-                msg = f"{sheet.name}: keskeytetty rivillä {n}"
-                result.errors.append(msg)
-                result.failed_rows += len(sheet.rows) - n + 1
-                log.warning(msg)
-                break
-            self._progress(f"  {sheet.name}: rivi {n}/{len(sheet.rows)}")
-            try:
-                self.fill_new_row(row)
-                result.successful_rows += 1
-            except Exception as exc:
-                result.failed_rows += 1
-                msg = f"{sheet.name} rivi {n}: {exc}"
-                result.errors.append(msg)
-                log.error(msg)
-        log.info(
-            "Välilehti '%s' valmis: %d/%d onnistui",
-            sheet.name,
-            result.successful_rows,
-            result.total_rows,
-        )
-        return result
+    def read_rows(self) -> list[PlanRow]:
+        """Lue lomakkeen nykyiset rivit (kentät config.field_names-järjestyksessä).
 
-    def fill_new_row(self, row: PlanRow) -> None:
-        """Täytä seuraava rivi. Nostaa poikkeuksen, jos jokin kenttä ei täyty.
+        Tyhjät rivit ohitetaan. Käytetään, kun opiskelijan olemassa oleva suunnitelma
+        halutaan esikatseluun muokattavaksi.
+        """
+        rows: list[PlanRow] = []
+        table_rows = self._rows()
+        for i in range(table_rows.count()):
+            tr = table_rows.nth(i)
+            values: dict[str, str] = {}
+            for field_name in self.config.field_names:
+                cell_selector = self.selectors.field_cells.get(field_name)
+                if not cell_selector:
+                    values[field_name] = ""
+                    continue
+                control = tr.locator(cell_selector).locator(self.selectors.input_in_cell).first
+                values[field_name] = control.input_value().strip() if control.count() > 0 else ""
+            row = PlanRow(values)
+            if not row.is_empty():
+                rows.append(row)
+        log.info("Luettiin lomakkeelta %d riviä", len(rows))
+        return rows
 
-        Lisäys- ja täydennystilassa ensimmäisellä kerralla käytetään taulukossa valmiina
-        olevaa tyhjää riviä, jos sellainen on; muuten painetaan lisäysnappia.
-        Korvaustilassa kirjoitetaan olemassa olevat rivit yli järjestyksessä.
+    def clear_rows(self) -> int:
+        """Tyhjennä lomake korvaustäyttöä varten; palauttaa poistettujen rivien määrän.
+
+        Rivit, joissa on poistonappi (samalla sivulatauksella lisätyt), poistetaan.
+        Tallennetut rivit eivät Wilmassa ole poistettavissa, joten niiden kentät
+        tyhjennetään ja ne täytetään uudelleen järjestyksessä; ylijäävät jäävät tyhjiksi.
         """
         if self.dry_run:
-            log.info("[kuiva-ajo] uusi rivi: %s", row.values)
-            return
-        table_row, _reused = self._target_row()
-        failures: list[str] = []
-        for field_name in self.config.field_names:
-            value = row.values.get(field_name, "")
-            try:
-                self._fill_cell(table_row, field_name, value)
-            except Exception as exc:
-                failures.append(f"{field_name}: {exc}")
-        if failures:
-            raise RuntimeError("; ".join(failures))
-
-    def add_table_row(self) -> Locator:
-        """Paina lisäysnappia ja palauta lisätty (viimeinen) rivi."""
-        tbody = self._tbody()
-        rows = self._rows()
-        before = rows.count()
-        button = self._add_button()
-        self._retry(
-            lambda: (button.scroll_into_view_if_needed(), button.click()),
-            what="rivin lisäys",
-        )
-        self.page.wait_for_function(
-            "([el, n]) => el.querySelectorAll(':scope > tr').length > n",
-            arg=[tbody.element_handle(), before],
-        )
-        return rows.nth(rows.count() - 1)
-
-    def existing_rows(self) -> list[dict[str, str]]:
-        """Lomakkeella nyt olevien rivien arvot kentittäin (kuiva-ajossa tyhjä lista)."""
-        if self.dry_run:
-            return []
-        rows = self._rows()
-        return [self._row_values(rows.nth(i)) for i in range(rows.count())]
-
-    # --- täyttötavat --------------------------------------------------------
-
-    def _target_row(self) -> tuple[Locator, bool]:
-        """Seuraava täytettävä rivi ja tieto siitä, oliko se lomakkeella valmiina."""
-        if self.mode is FillMode.REPLACE:
-            if self._existing_total is None:
-                self._begin_replace()
-            assert self._existing_total is not None
-            if self._next_existing < self._existing_total:
-                row = self._rows().nth(self._next_existing)
-                self._next_existing += 1
-                return row, True
-            return self.add_table_row(), False
-        reused = self._reuse_trailing_empty_row()
-        if reused is not None:
-            return reused, True
-        return self.add_table_row(), False
-
-    def _begin_replace(self) -> None:
-        if self.dry_run:
-            self._existing_total = 0
-            log.info("[kuiva-ajo] korvaustila: lomakkeen rivejä ei lueta")
-            return
-        self._existing_total = self._rows().count()
-        self._next_existing = 0
-        log.info(
-            "Korvataan olemassa oleva opintosuunnitelma: lomakkeella %d riviä",
-            self._existing_total,
-        )
-
-    def _finish_replace(self) -> tuple[int, int]:
-        """Poista tai tyhjennä rivit, joita ei kirjoitettu yli → (poistettu, tyhjennetty)."""
-        if self.dry_run or self._existing_total is None:
-            return 0, 0
-        leftover = self._existing_total - self._next_existing
-        if leftover <= 0:
-            return 0, 0
+            log.info("[kuiva-ajo] rivien poisto")
+            return 0
+        removed = 0
         remove_sel = self.selectors.remove_row_button.strip()
-        removed = cleared = 0
-        # Viimeisestä alkaen, jotta poisto ei siirrä vielä käsittelemättömien rivien indeksejä.
-        for i in range(self._existing_total - 1, self._next_existing - 1, -1):
-            try:
-                if remove_sel and self._remove_row(i, remove_sel):
-                    removed += 1
-                else:
-                    self._clear_row(self._rows().nth(i))
-                    cleared += 1
-            except Exception as exc:
-                log.error("Ylimääräisen rivin %d käsittely epäonnistui: %s", i + 1, exc)
-        if removed:
-            log.info("Poistettu %d ylimääräistä riviä", removed)
-        if cleared:
-            log.warning(
-                "Tyhjennettiin %d ylimääräistä riviä, joilla ei ole poistonappia "
-                "(Wilmassa tallennetut rivit). Poista ne Wilmassa käsin.",
-                cleared,
+        for _ in range(500 if remove_sel else 0):  # turvaraja; tyhjä valitsin = ei poistoja
+            rows = self._rows()
+            count = rows.count()
+            button = None
+            for i in range(count - 1, -1, -1):
+                candidate = rows.nth(i).locator(remove_sel)
+                if candidate.count() > 0:
+                    button = candidate.first
+                    break
+            if button is None:
+                break
+            button.click()
+            self.page.wait_for_function(
+                "([el, n]) => el.querySelectorAll(':scope > tr').length < n",
+                arg=[self._tbody().element_handle(), count],
             )
-        return removed, cleared
-
-    def _remove_row(self, index: int, selector: str) -> bool:
-        """Paina rivin poistonappia. Palauttaa False, jos rivillä ei ole nappia."""
-        tbody = self._tbody()
+            removed += 1
+        # jäljelle jääneet rivit tyhjennetään
         rows = self._rows()
-        before = rows.count()
-        button = rows.nth(index).locator(selector).first
-        if button.count() == 0:
-            return False
-        self._retry(
-            lambda: (button.scroll_into_view_if_needed(), button.click()),
-            what=f"rivin {index + 1} poisto",
-        )
-        self.page.wait_for_function(
-            "([el, n]) => el.querySelectorAll(':scope > tr').length < n",
-            arg=[tbody.element_handle(), before],
-        )
-        return True
+        for i in range(rows.count()):
+            for field_name in self.config.field_names:
+                cell_selector = self.selectors.field_cells.get(field_name)
+                if not cell_selector:
+                    continue
+                control = (
+                    rows.nth(i).locator(cell_selector).locator(self.selectors.input_in_cell).first
+                )
+                if control.count() > 0:
+                    control.fill("")
+        self._reuse_all = True
+        self._next_reusable = 0
+        self._first_row_done = False
+        self._cleared = True
+        self.removed_rows += removed
+        log.info("Poistettiin %d riviä, %d tyhjennettiin", removed, rows.count())
+        return removed
+
+    def _trailing_empty_rows(self) -> int:
+        """Taulukon lopussa olevien tyhjien rivien määrä (korvaustilan ylijäämä)."""
+        rows = self._rows()
+        n = 0
+        for i in range(rows.count() - 1, -1, -1):
+            if not self._row_is_empty(rows.nth(i)):
+                break
+            n += 1
+        return n
 
     def _drop_existing_rows(self, sheets: list[Sheet]) -> tuple[list[Sheet], list[SheetResult]]:
         """Täydennystila: poista Excel-riveistä ne, joiden avainkenttä on jo lomakkeella."""
         key = self.config.resolved_key_field
-        existing = [values.get(key, "") for values in self.existing_rows()]
+        existing = [] if self.dry_run else [r.values.get(key, "") for r in self.read_rows()]
         existing = [v for v in existing if _norm(v)]
         log.info(
             "Täydennetään puuttuvat: lomakkeella on %d riviä, joilla on %s", len(existing), key
@@ -321,6 +266,69 @@ class FormFiller:
                 )
             kept.append(Sheet(sheet.name, rows))
         return kept, results
+
+    def process_sheet(self, sheet: Sheet) -> SheetResult:
+        result = SheetResult(sheet.name, len(sheet.rows))
+        log.info("Aloitetaan välilehti '%s' (%d riviä)", sheet.name, len(sheet.rows))
+        for n, row in enumerate(sheet.rows, start=1):
+            if self._stop_requested():
+                msg = f"{sheet.name}: keskeytetty rivillä {n}"
+                result.errors.append(msg)
+                result.failed_rows += len(sheet.rows) - n + 1
+                log.warning(msg)
+                break
+            self._progress(f"  {sheet.name}: rivi {n}/{len(sheet.rows)}")
+            try:
+                self.fill_new_row(row)
+                result.successful_rows += 1
+            except Exception as exc:
+                result.failed_rows += 1
+                msg = f"{sheet.name} rivi {n}: {exc}"
+                result.errors.append(msg)
+                log.error(msg)
+        log.info(
+            "Välilehti '%s' valmis: %d/%d onnistui",
+            sheet.name,
+            result.successful_rows,
+            result.total_rows,
+        )
+        return result
+
+    def fill_new_row(self, row: PlanRow) -> None:
+        """Täytä seuraava rivi. Nostaa poikkeuksen, jos jokin kenttä ei täyty.
+
+        Ensin käytetään taulukossa valmiina oleva tyhjä rivi (lisäystilassa viimeinen,
+        korvaustilassa kaikki tyhjennetyt järjestyksessä); muuten painetaan lisäysnappia.
+        """
+        if self.dry_run:
+            log.info("[kuiva-ajo] uusi rivi: %s", row.values)
+            return
+        table_row = self._next_empty_row() or self.add_table_row()
+        failures: list[str] = []
+        for field_name in self.config.field_names:
+            value = row.values.get(field_name, "")
+            try:
+                self._fill_cell(table_row, field_name, value)
+            except Exception as exc:
+                failures.append(f"{field_name}: {exc}")
+        if failures:
+            raise RuntimeError("; ".join(failures))
+
+    def add_table_row(self) -> Locator:
+        """Paina lisäysnappia ja palauta lisätty (viimeinen) rivi."""
+        tbody = self._tbody()
+        rows = self._rows()
+        before = rows.count()
+        button = self._add_button()
+        self._retry(
+            lambda: (button.scroll_into_view_if_needed(), button.click()),
+            what="rivin lisäys",
+        )
+        self.page.wait_for_function(
+            "([el, n]) => el.querySelectorAll(':scope > tr').length > n",
+            arg=[tbody.element_handle(), before],
+        )
+        return rows.nth(rows.count() - 1)
 
     # --- sisäiset apurit ----------------------------------------------------
 
@@ -354,42 +362,39 @@ class FormFiller:
                 return candidate.first
         return self.page.locator(sel).first
 
-    def _reuse_trailing_empty_row(self) -> Locator | None:
-        """Palauta taulukon viimeinen rivi, jos sitä ei ole vielä käytetty ja se on tyhjä."""
-        if self._first_row_done:
+    def _next_empty_row(self) -> Locator | None:
+        """Seuraava uudelleenkäytettävä tyhjä rivi tai None, jos sellaista ei ole."""
+        rows = self._rows()
+        count = rows.count()
+        if self._reuse_all:
+            for i in range(self._next_reusable, count):
+                if self._row_is_empty(rows.nth(i)):
+                    self._next_reusable = i + 1
+                    return rows.nth(i)
+            self._reuse_all = False  # tyhjät loppuivat → jatketaan lisäysnapilla
+            self._first_row_done = True
+            return None
+        if self._first_row_done or count == 0:
             return None
         self._first_row_done = True
-        rows = self._rows()
-        if rows.count() == 0:
-            return None
-        last = rows.nth(rows.count() - 1)
-        controls = last.locator(self.selectors.input_in_cell)
-        if controls.count() < len(self.config.field_names):
-            return None
-        values = controls.evaluate_all("els => els.map(e => (e.value || '').trim())")
-        if all(v == "" for v in values):
+        last = rows.nth(count - 1)
+        if self._row_is_empty(last):
             log.info("Käytetään taulukossa valmiina olevaa tyhjää riviä")
             return last
         return None
 
-    def _row_values(self, table_row: Locator) -> dict[str, str]:
-        values: dict[str, str] = {}
-        for field_name in self.config.field_names:
-            cell_selector = self.selectors.field_cells.get(field_name)
-            if not cell_selector:
-                continue
-            control = table_row.locator(cell_selector).locator(self.selectors.input_in_cell)
-            values[field_name] = control.first.input_value() if control.count() else ""
-        return values
+    def _row_is_empty(self, table_row: Locator) -> bool:
+        controls = table_row.locator(self.selectors.input_in_cell)
+        if controls.count() < len(self.config.field_names):
+            return False
+        values = controls.evaluate_all("els => els.map(e => (e.value || '').trim())")
+        return all(v == "" for v in values)
 
-    def _control(self, table_row: Locator, field_name: str) -> Locator:
+    def _fill_cell(self, table_row: Locator, field_name: str, value: str) -> None:
         cell_selector = self.selectors.field_cells.get(field_name)
         if not cell_selector:
             raise RuntimeError(f"kentälle '{field_name}' ei ole solulokaattoria asetuksissa")
-        return table_row.locator(cell_selector).locator(self.selectors.input_in_cell).first
-
-    def _fill_cell(self, table_row: Locator, field_name: str, value: str) -> None:
-        control = self._control(table_row, field_name)
+        control = table_row.locator(cell_selector).locator(self.selectors.input_in_cell).first
         text = value.strip() or self.config.empty_value
 
         def do_fill() -> None:
@@ -405,26 +410,13 @@ class FormFiller:
         self._retry(do_fill, what=f"kentän '{field_name}' täyttö")
         log.debug("%s ← %r", field_name, text)
 
-    def _clear_row(self, table_row: Locator) -> None:
-        """Tyhjennä rivin kentät kokonaan (välirivi tai ylimääräinen rivi korvaustilassa)."""
-        for field_name in self.config.field_names:
-            control = self._control(table_row, field_name)
-            if control.count() == 0:
-                continue
-            tag = control.evaluate("el => el.tagName.toLowerCase()")
-            if tag == "select":
-                control.select_option(index=0)
-            else:
-                control.fill("")
-
     def _add_separator_row(self, after_sheet: str) -> None:
         if self.dry_run:
             log.info("[kuiva-ajo] välirivi välilehden '%s' jälkeen", after_sheet)
             return
         try:
-            row, reused = self._target_row()
-            if reused:
-                self._clear_row(row)
+            if self._next_empty_row() is None:
+                self.add_table_row()
             log.info("Lisätty tyhjä välirivi välilehden '%s' jälkeen", after_sheet)
         except Exception as exc:
             log.warning("Väliriviä ei voitu lisätä: %s", exc)
@@ -453,8 +445,10 @@ class FormFiller:
         )
 
 
+# --- täydennystilan vertailu ------------------------------------------------------
+
 _OSP_SUFFIX = re.compile(r"[\s,(]*\d+(?:[.,]\d+)?\s*osp\)?\s*$", re.IGNORECASE)
-_MIN_PARTIAL = 8  # sisältyvyysvertailu vain, kun lyhyempi teksti on vähintään näin pitkä
+_MIN_PARTIAL = 8  # alkuosavertailu vain, kun lyhyempi teksti on vähintään näin pitkä
 
 
 def _norm(text: str) -> str:
@@ -472,9 +466,10 @@ def _norm(text: str) -> str:
 def _find_match(value: str, existing: list[str]) -> str | None:
     """Lomakkeen rivi, jota Excel-rivin avainteksti vastaa; None jos ei mitään.
 
-    Ensin täsmällinen vastaavuus normalisoituna. Sitten sisältyvyys molempiin suuntiin,
-    kunhan lyhyempi teksti on tarpeeksi pitkä ("ohjelmoinnin perusteet" vastaa riviä
-    "Ohjelmoinnin perusteet, verkkokurssi"), jotta "Fysiikka" ei osu "Fysiikka 2":een.
+    Ensin täsmällinen vastaavuus normalisoituna. Sitten alkuosan vastaavuus molempiin
+    suuntiin, kunhan lyhyempi teksti on tarpeeksi pitkä ja jatko on lisämääre eikä numero
+    ("ohjelmoinnin perusteet" vastaa riviä "Ohjelmoinnin perusteet, verkkokurssi", mutta
+    "Fysiikka 3" ei riviä "Fysiikka").
     """
     wanted = _norm(value)
     for item in existing:

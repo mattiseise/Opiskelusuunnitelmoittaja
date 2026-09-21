@@ -8,40 +8,29 @@
     <div class="repeater">
       <table>
         <thead>
-          <tr><th>Osaamistavoite / tutkinnon osa</th><th>Laajuus (osp)</th><th>Suoritustapa / osaaminen hankitaan</th><th>Suoritusajankohta</th></tr>
+          <tr><th>Osaamistavoite / tutkinnon osa</th><th>Laajuus (osp)</th><th>Suoritustapa / osaaminen hankitaan</th><th>Suoritusajankohta</th><th></th></tr>
         </thead>
         <tbody id="rows">
-          <!-- Kuten Wilmassa: tallennetulla (tai valmiilla tyhjällä) rivillä ei ole poistonappia -->
-          <tr><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+          <tr><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td></td></tr>
         </tbody>
-        <tfoot>
-          <tr><td colspan="4">
-            <button type="submit" name="prepeater9700__add" id="f-prepeater9700__add" value="Lisää rivi">+</button>
-          </td></tr>
-        </tfoot>
       </table>
+      <button type="button" id="f-prepeater9700__add">+</button>
     </div>
 
     <h2>Pvm &amp; päivittäjä</h2>
     <div class="repeater">
       <table>
-        <thead><tr><th>Päivitetty</th><th>Päivittäjä</th></tr></thead>
+        <thead><tr><th>Päivitetty</th><th>Päivittäjä</th><th></th></tr></thead>
         <tbody id="meta-rows">
-          <tr><td><input type="text" class="date"></td><td><input type="text"></td></tr>
+          <tr><td><input type="text" class="date"></td><td><input type="text"></td><td></td></tr>
         </tbody>
-        <tfoot>
-          <tr><td colspan="2"><button type="submit" name="prepeater2153__add" id="f-prepeater2153__add" value="Lisää rivi">+</button></td></tr>
-        </tfoot>
       </table>
+      <button type="button" id="f-prepeater9800__add">+</button>
     </div>
   </form>
 </main>
 <script>
-  // Jäljittelee Wilman repeater-skriptiä: lisätty rivi saa viidennen solun ja poistonapin
-  // (id päättyy __remove), tallennetuilla riveillä nappia ei ole. Napit ovat type=submit
-  // kuten Wilmassa, joten oletustoiminto estetään.
-  let counter = 100;
-  function addRow(tbodyId, cols, prefix) {
+  function addRow(tbodyId, cols) {
     setTimeout(() => {
       const tr = document.createElement('tr');
       for (let i = 0; i < cols; i++) {
@@ -52,33 +41,14 @@
         tr.appendChild(td);
       }
       const last = document.createElement('td');
-      const del = document.createElement('button');
-      del.type = 'submit';
-      del.id = `f-${prefix}-${++counter}__remove`;
-      del.name = `${prefix}-${counter}__remove`;
-      del.title = 'Poista rivi';
-      del.textContent = '−';
-      last.appendChild(del);
-      tr.appendChild(last);
+      const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = '−';
+      rm.className = 'remove'; rm.addEventListener('click', () => tr.remove());
+      last.appendChild(rm); tr.appendChild(last);
       document.getElementById(tbodyId).appendChild(tr);
     }, 50);
   }
-  document.querySelector('form').addEventListener('submit', (ev) => ev.preventDefault());
-  document.getElementById('f-prepeater9700__add').addEventListener('click', (ev) => {
-    ev.preventDefault();
-    addRow('rows', 4, 'prepeater9700');
-  });
-  document.getElementById('f-prepeater2153__add').addEventListener('click', (ev) => {
-    ev.preventDefault();
-    addRow('meta-rows', 2, 'prepeater2153');
-  });
-  document.getElementById('rows').addEventListener('click', (ev) => {
-    const btn = ev.target.closest('button[id$="__remove"]');
-    if (btn) {
-      ev.preventDefault();
-      setTimeout(() => btn.closest('tr').remove(), 50);
-    }
-  });
+  document.getElementById('f-prepeater9700__add').addEventListener('click', () => addRow('rows', 4));
+  document.getElementById('f-prepeater9800__add').addEventListener('click', () => addRow('meta-rows', 2));
 </script>
 </body>
 </html>

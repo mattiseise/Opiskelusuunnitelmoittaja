@@ -123,28 +123,34 @@ git push origin v2.1.0
 
 ## Käyttö ikkunassa
 
-1. **Käynnistä Chrome** avaa Chromen erilliseen profiiliin, johon kirjautuminen säilyy.
-   Tila näkyy tekstinä: burgundi "Yhteys kunnossa · portti 9222", kun yhteys on.
-2. Avaa Wilman opiskelusuunnitelmalomake siihen Chrome-ikkunaan.
-3. Valitse pääsuuntaus ja rastita lisävalinnat (lukio, YTO, väylä), tai valitse välilehdet käsin.
-   Esikatselu näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
-4. Rastita esikatselusta vietävät rivit (oletuksena kaikki; otsikkorivin rasti valitsee tai
-   poistaa kaikki kerralla). *Ajankohta*-solua voi muokata kaksoisnapsauttamalla, ja
-   *Aseta ajankohta valituille* kirjoittaa saman ajankohdan kaikille rastitetuille riveille
-   (esim. `8/2026–5/2027`). Muokkaukset viedään lomakkeelle Excelin arvon sijaan.
+Ikkuna kulkee viidessä vaiheessa:
+
+1. **Käynnistä Chrome.** Nappi avaa Chromen erilliseen profiiliin, johon Wilma-kirjautuminen
+   säilyy kertojen välillä. Tila näkyy tekstinä ("Yhteys kunnossa · portti 9222").
+2. **Avaa opiskelijan opintokortti.** Siirry Chrome-ikkunassa Wilmaan, avaa opiskelijan
+   opintokortti ja siitä Opintosuunnitelma-lomake muokkaustilassa. Jätä välilehti auki.
+3. **Valitse opinnot.** Valitse lähde-Excel (muistetaan), pääsuuntaus ja lisävalinnat (lukio,
+   YTO, väylä), tai välilehdet käsin. *Ohje Excelistä* kertoo, miten Excel rakennetaan.
+4. **Esikatselu ja muokkaus.** Taulukko näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
+   Jokaisen solun voi muokata kaksoisnapsauttamalla, rivin rastin voi poistaa, otsikkorivin rasti
+   valitsee tai poistaa kaikki, *Aseta ajankohta valituille* kirjoittaa saman ajankohdan
+   rastitetuille. Rivin järjestystä vaihdetaan raahaamalla rivin alussa olevasta
+   tarttumasta ⋮⋮ (tai ▲▼-linkeillä). *Hae nykyiset rivit Wilmasta* lukee avoimen
+   lomakkeen rivit esikatseluun lähteenä *Wilma*: näin opiskelijan olemassa olevaa suunnitelmaa
+   voi järjestellä, muokata ja täydentää Excelin riveillä ilman Wilman käsityötä.
 
    ![Esikatselu muokattuna](docs/kuvat/02-esikatselu-muokattu.png)
 
-5. Valitse **täyttötapa** kohdassa 4 (ks. [Täyttötapa](#täyttötapa)): *Lisää loppuun*,
-   *Korvaa olemassa oleva opintosuunnitelma* tai *Täydennä puuttuvat*. Valinta muistetaan
-   seuraavaan kertaan.
-6. Paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin
-   jälkeen.
+5. **Täyttö.** Valitse täyttötapa: *Lisää lomakkeen loppuun*, *Korvaa lomakkeen nykyiset
+   rivit* (oletus, kun rivit on haettu Wilmasta) tai *Täydennä puuttuvat* (ks.
+   [Täyttötapa](#täyttötapa)). Valinta muistetaan seuraavaan kertaan. Paina **Täytä lomake**.
+   Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin jälkeen.
 
    ![Täyttö käynnissä](docs/kuvat/03-taytto.png)
-7. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
 
-Kohdan 2 *Avaa Excel* avaa lähdetaulukon Excelissä (tai .xlsx-tiedostojen oletusohjelmassa).
+6. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
+
+Kohdan 3 *Avaa Excel* avaa lähdetaulukon Excelissä (tai .xlsx-tiedostojen oletusohjelmassa).
 Tallenna muutokset Excelissä ja paina *Lataa uudelleen*, niin esikatselu päivittyy.
 
 Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset*-ikkunassa.
@@ -155,12 +161,14 @@ Lomakkeella voi olla jo opintosuunnitelma. Täyttötapa määrää, mitä sen ri
 
 | Täyttötapa                                   | Mitä tapahtuu                                                                                                                                                                                                              |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Lisää loppuun** (oletus)                   | Nykyisiin riveihin ei kosketa. Uudet rivit tulevat perään; taulukon valmis tyhjä rivi käytetään ensin.                                                                                                                      |
-| **Korvaa olemassa oleva opintosuunnitelma**  | Nykyiset rivit kirjoitetaan yli järjestyksessä, ja loput lisätään. Jos vanhoja rivejä on enemmän kuin uusia, ylimääräiset poistetaan rivin poistonapilla (`selectors.remove_row_button`, oletus `[id$='__remove']`). Wilmassa nappi on vain samassa istunnossa lisätyillä riveillä; tallennetut rivit tyhjennetään, ja ne poistetaan Wilmassa käsin. |
-| **Täydennä puuttuvat**                       | Lomakkeelta luetaan nykyiset rivit. Excel-rivi ohitetaan, jos sen *Osaamistavoite* on jo lomakkeella. Vertailu ohittaa kirjainkoon, välilyönnit ja perään kirjoitetun laajuuden ("Taide ja luova ilmaisu 1osp" = "Taide ja luova ilmaisu"), ja hyväksyy myös alkuosan vastaavuuden, kun teksti on vähintään 8 merkkiä. Vain puuttuvat lisätään perään, nykyisiin ei kosketa. Loki ja yhteenveto kertovat ohitetut. |
+| **Lisää lomakkeen loppuun** (oletus)         | Nykyisiin riveihin ei kosketa. Uudet rivit tulevat perään; taulukon valmis tyhjä rivi käytetään ensin.                                                                                                                      |
+| **Korvaa lomakkeen nykyiset rivit**          | Esikatselun rivit kirjoitetaan lomakkeen nykyisten rivien päälle järjestyksessä. Samalla sivulatauksella lisätyt rivit poistetaan poistonapilla (`selectors.remove_row_button`); Wilmassa tallennettuja rivejä ei voi poistaa napilla, joten ne tyhjennetään ja täytetään uudelleen, ylijäävät jäävät tyhjiksi ja uusia lisätään vain tarvittaessa. Yhteenveto kertoo, montako tyhjää riviä jäi poistettavaksi Wilmassa käsin. Oletus, kun rivit on haettu Wilmasta. |
+| **Täydennä puuttuvat**                       | Lomakkeelta luetaan nykyiset rivit. Excel-rivi ohitetaan, jos sen *Osaamistavoite* on jo lomakkeella. Vertailu ohittaa kirjainkoon, välilyönnit ja perään kirjoitetun laajuuden ("Taide ja luova ilmaisu 1osp" = "Taide ja luova ilmaisu"), ja hyväksyy myös alkuosan vastaavuuden, kun teksti on vähintään 8 merkkiä eikä jatko ole numero. Vain puuttuvat lisätään perään, nykyisiin ei kosketa. Loki ja yhteenveto kertovat ohitetut. |
 
 Tyhjällä lomakkeella kaikki kolme tuottavat saman tuloksen. Korvaustila vahvistetaan
-erikseen ennen täyttöä. Oletustavan, täydennyksen tunnistekentän (`fill.key_field`, oletus
+erikseen ennen täyttöä. *Hae nykyiset rivit Wilmasta* ja korvaustila sopivat yhteen, kun
+suunnitelmaa järjestellään tai muokataan; täydennystila sopii, kun Exceliin on tullut uusia
+rivejä ja vanhat saavat jäädä sellaisinaan. Oletustavan, täydennyksen tunnistekentän (`fill.key_field`, oletus
 `osaamistavoite`) ja poistonapin valitsimen voi muuttaa *Asetukset → Yleiset* ja *Lomake*.
 Komentorivillä täyttötapa annetaan lipulla `--lisaa`, `--korvaa` tai `--taydenna`; ohjattu
 kysely kysyy sen, jos lippua ei anneta.
@@ -263,7 +271,7 @@ Kaikki avaimet ovat valinnaisia; puuttuvat täydennetään oletuksilla.
   "selectors": {
     "table_body": "table:has(th:has-text(\"Osaamistavoite\")) tbody",  // vain opintotaulukko
     "add_row_button": "[id$='__add']",
-    "remove_row_button": "[id$='__remove']",  // poistonappi rivin sisällä (korvaustila); tyhjä = tyhjennä aina
+    "remove_row_button": "td:last-child button, td:last-child a, [id$='__remove']",  // poistonappi (vain samalla latauksella lisätyillä riveillä); tyhjä = tyhjennä aina
     "field_cells": {
       "osaamistavoite": "td:nth-child(1)",
       "laajuus": "td:nth-child(2)",

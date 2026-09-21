@@ -45,8 +45,14 @@ def lomake_url() -> str:
 
 @pytest.fixture
 def wilma_url() -> str:
-    """Wilman lomakkeen rakennekopio, jossa on neljä tallennettua riviä ilman poistonappia."""
+    """Wilman lomakkeen rakennekopio: samat id-kaavat, neljä tallennettua riviä, tfootin nappi."""
     return (FIXTURES / "wilma-lomake.html").resolve().as_uri()
+
+
+@pytest.fixture
+def tallennettu_url() -> str:
+    """Wilman tallennettua lomaketta jäljittelevä sivu: rivit ilman poistonappia."""
+    return (FIXTURES / "lomake_tallennettu.html").resolve().as_uri()
 
 
 @pytest.fixture(scope="session")

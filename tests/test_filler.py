@@ -132,18 +132,90 @@ def test_progress_callback_is_called(page: Page, lomake_url: str) -> None:
     assert messages == ["  A: rivi 1/2", "  A: rivi 2/2"]
 
 
+def test_read_rows_and_clear_rows(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    filler = FormFiller(page, CFG)
+    filler.fill_new_row(_row("A1", "1", "Tapa", "8/2026"))
+    filler.fill_new_row(_row("A2", "2"))
+    filler.fill_new_row(_row("A3", "3"))
+    assert len(_table_values(page)) == 3
+
+    rows = FormFiller(page, CFG).read_rows()
+    assert [r.values["osaamistavoite"] for r in rows] == ["A1", "A2", "A3"]
+    assert rows[0].values["suoritusajankohta"] == "8/2026"
+    assert rows[1].values["suoritusajankohta"] == ""  # välilyönti trimmataan
+
+    clearer = FormFiller(page, CFG)
+    removed = clearer.clear_rows()
+    assert removed == 2  # ensimmäisellä rivillä ei ole poistonappia
+    assert _table_values(page) == [["", "", "", ""]]
+    # tyhjennetty rivi käytetään uudelleen
+    clearer.fill_new_row(_row("B1", "9"))
+    assert _table_values(page)[0][0] == "B1" and len(_table_values(page)) == 1
+
+
+def test_saved_form_append_uses_trailing_empty_row(page: Page, tallennettu_url: str) -> None:
+    """Lisäystila tallennetulla lomakkeella: vanhat rivit säilyvät, tyhjä viimeinen käytetään."""
+    page.goto(tallennettu_url)
+    filler = FormFiller(page, CFG)
+    filler.fill_new_row(_row("Uusi 1", "5"))
+    filler.fill_new_row(_row("Uusi 2", "6"))
+    values = _table_values(page)
+    assert [v[0] for v in values] == ["Vanha 1", "Vanha 2", "Vanha 3", "Uusi 1", "Uusi 2"]
+    assert page.locator("#count").input_value() == "5"
+    assert _table_values(page, "#meta-rows") == [["", ""]]
+
+
+def test_saved_form_replace_overwrites_in_place(page: Page, tallennettu_url: str) -> None:
+    """Korvaustila: tallennettuja rivejä ei voi poistaa → tyhjennetään ja kirjoitetaan yli."""
+    page.goto(tallennettu_url)
+    rows = FormFiller(page, CFG).read_rows()
+    assert [r.values["osaamistavoite"] for r in rows] == ["Vanha 1", "Vanha 2", "Vanha 3"]
+
+    filler = FormFiller(page, CFG)
+    assert filler.clear_rows() == 0  # mitään ei voitu poistaa napilla
+    assert _table_values(page) == [[""] * 4] * 4
+
+    filler.fill_new_row(_row("A", "1"))
+    filler.fill_new_row(_row("B", "2"))
+    assert [v[0] for v in _table_values(page)] == ["A", "B", "", ""]
+
+    # tyhjät loppuvat → lisäysnappi
+    filler.fill_new_row(_row("C", "3"))
+    filler.fill_new_row(_row("D", "4"))
+    filler.fill_new_row(_row("E", "5"))
+    assert [v[0] for v in _table_values(page)] == ["A", "B", "C", "D", "E"]
+    assert page.locator("#count").input_value() == "5"
+
+    # toinen korvaus samalla sivulla: lisätty rivi E poistetaan napilla, loput tyhjennetään
+    second = FormFiller(page, CFG)
+    assert second.clear_rows() == 1
+    assert [v[0] for v in _table_values(page)] == ["", "", "", ""]
+
+
+def test_saved_form_replace_with_separator(page: Page, tallennettu_url: str) -> None:
+    """Välirivi kuluttaa korvaustilassa tyhjän rivin eikä lisää uutta."""
+    page.goto(tallennettu_url)
+    filler = FormFiller(page, CFG)
+    filler.clear_rows()
+    filler.process_sheets([Sheet("A", [_row("A1", "1")]), Sheet("B", [_row("B1", "2")])])
+    assert [v[0] for v in _table_values(page)] == ["A1", "", "B1", ""]
+
+
 # --- täyttötavat: korvaa / täydennä --------------------------------------------
 
 
 def _prefill(page: Page, *rows: PlanRow) -> None:
-    """Simuloi lomakkeella jo olevaa opintosuunnitelmaa (lisäystilassa, ilman väliriviä)."""
+    """Simuloi lomakkeella jo olevaa opintosuunnitelmaa (lisäystilassa, ilman väliriviä).
+
+    lomake.html: ensimmäinen (valmis) rivi on ilman poistonappia kuten Wilman tallennettu
+    rivi, lisätyt rivit saavat poistonapin.
+    """
     cfg = replace(CFG, separator_row_between_sheets=False)
     FormFiller(page, cfg).process_sheets([Sheet("Vanha", list(rows))])
 
 
-def test_replace_overwrites_existing_rows_in_order_and_adds_more(
-    page: Page, lomake_url: str
-) -> None:
+def test_replace_mode_overwrites_in_place_and_adds_more(page: Page, lomake_url: str) -> None:
     page.goto(lomake_url)
     _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"))
     assert len(_table_values(page)) == 2
@@ -154,13 +226,14 @@ def test_replace_overwrites_existing_rows_in_order_and_adds_more(
     )
     assert summary.mode is FillMode.REPLACE
     assert summary.successful_rows == 3
-    assert summary.removed_rows == 0 and summary.cleared_rows == 0
+    assert summary.removed_rows == 1  # lisätty rivi 2 poistettiin napilla, rivi 1 tyhjennettiin
+    assert summary.cleared_rows == 0  # loppuun ei jäänyt tyhjiä
     values = _table_values(page)
     assert [v[0] for v in values] == ["Uusi 1", "Uusi 2", "Uusi 3"]
     assert values[0][1] == "10"
 
 
-def test_replace_clears_leftover_rows_when_no_remove_button(
+def test_replace_mode_reports_trailing_empty_rows(
     page: Page, lomake_url: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     page.goto(lomake_url)
@@ -171,21 +244,17 @@ def test_replace_clears_leftover_rows_when_no_remove_button(
         summary = FormFiller(page, cfg, mode=FillMode.REPLACE).process_sheets(
             [Sheet("A", [_row("Uusi 1", "10")])]
         )
-    assert summary.cleared_rows == 2
     assert summary.removed_rows == 0
+    assert summary.cleared_rows == 2  # ilman poistonappia kaikki jäävät, kaksi tyhjäksi
     values = _table_values(page)
-    assert len(values) == 3  # rivejä ei voitu poistaa → tyhjennetty
-    assert values[0][0] == "Uusi 1"
-    assert values[1] == ["", "", "", ""]
-    assert values[2] == ["", "", "", ""]
-    assert any("Tyhjennettiin 2" in r.message for r in caplog.records)
+    assert [v[0] for v in values] == ["Uusi 1", "", ""]
+    assert any("jäi 2 tyhjää riviä" in r.message for r in caplog.records)
 
 
-def test_replace_removes_leftover_rows_with_remove_button(page: Page, lomake_url: str) -> None:
+def test_replace_mode_removes_added_rows_with_default_selector(page: Page, lomake_url: str) -> None:
     page.goto(lomake_url)
     _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"), _row("Vanha 3", "3"))
 
-    # oletusvalitsin [id$='__remove'] – lisätyillä riveillä 2 ja 3 on nappi, valmiilla rivillä 1 ei
     summary = FormFiller(page, CFG, mode=FillMode.REPLACE).process_sheets(
         [Sheet("A", [_row("Uusi 1", "10")])]
     )
@@ -194,39 +263,29 @@ def test_replace_removes_leftover_rows_with_remove_button(page: Page, lomake_url
     assert _table_values(page) == [["Uusi 1", "10", "Joustava", " "]]
 
 
-def test_replace_mixed_saved_and_added_rows(page: Page, lomake_url: str) -> None:
-    """Valmis rivi ilman nappia tyhjennetään, lisätyt rivit poistetaan."""
+def test_replace_mode_with_nothing_to_fill(page: Page, lomake_url: str) -> None:
     page.goto(lomake_url)
     _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"), _row("Vanha 3", "3"))
-    # kirjoitetaan yli 0 riviä → kaikki kolme ovat ylimääräisiä
     summary = FormFiller(page, CFG, mode=FillMode.REPLACE).process_sheets([Sheet("A", [])])
     assert summary.removed_rows == 2
     assert summary.cleared_rows == 1
     assert _table_values(page) == [["", "", "", ""]]
 
 
-def test_replace_separator_reuses_existing_row(page: Page, lomake_url: str) -> None:
+def test_replace_mode_separator_and_empty_form(page: Page, lomake_url: str) -> None:
     page.goto(lomake_url)
-    _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"), _row("Vanha 3", "3"))
-
+    _prefill(page, _row("Vanha 1", "1"), _row("Vanha 2", "2"))
     summary = FormFiller(page, CFG, mode=FillMode.REPLACE).process_sheets(
         [Sheet("A", [_row("A1", "1")]), Sheet("B", [_row("B1", "2")])]
     )
     assert summary.successful_rows == 2
-    values = _table_values(page)
-    assert len(values) == 3  # A1, välirivi (vanha rivi tyhjennettynä), B1 – ei ylimääräisiä
-    assert values[0][0] == "A1"
-    assert values[1] == ["", "", "", ""]
-    assert values[2][0] == "B1"
-    assert summary.cleared_rows == 0
+    assert [v[0] for v in _table_values(page)] == ["A1", "", "B1"]
+    assert summary.cleared_rows == 0  # välirivi ei ole ylijäämä
 
-
-def test_replace_on_empty_form_behaves_like_append(page: Page, lomake_url: str) -> None:
     page.goto(lomake_url)
     summary = FormFiller(page, CFG, mode=FillMode.REPLACE).process_sheets(
         [Sheet("A", [_row("A1", "1"), _row("A2", "2")])]
     )
-    assert summary.successful_rows == 2
     assert [v[0] for v in _table_values(page)] == ["A1", "A2"]
 
 
@@ -267,8 +326,7 @@ def test_complete_adds_no_separator_for_fully_present_sheet(page: Page, lomake_u
     )
     assert summary.skipped_rows == 1
     assert summary.successful_rows == 1
-    values = _table_values(page)
-    assert [v[0] for v in values] == ["A1", "B1"]  # ei väliriviä, koska A ei tuonut rivejä
+    assert [v[0] for v in _table_values(page)] == ["A1", "B1"]  # ei väliriviä
 
 
 def test_complete_on_empty_form_fills_everything(page: Page, lomake_url: str) -> None:
@@ -319,7 +377,7 @@ def test_wilma_replace_clears_saved_rows_and_removes_added(page: Page, wilma_url
     )
     assert summary.successful_rows == 2
     assert summary.removed_rows == 1  # lisätty rivi poistettiin napista
-    assert summary.cleared_rows == 2  # tallennetut rivit 3 ja 4 tyhjennettiin
+    assert summary.cleared_rows == 2  # tallennetut rivit 3 ja 4 jäivät tyhjiksi
     values = _table_values(page)
     assert [v[0] for v in values] == ["Uusi 1", "Uusi 2", "", ""]
     assert values[2] == ["", "", "", ""]

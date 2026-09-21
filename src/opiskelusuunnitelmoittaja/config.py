@@ -73,9 +73,9 @@ class Selectors:
         }
     )
     input_in_cell: str = "input, textarea, select"
-    # Poistonappi rivin sisällä (Wilma: vain samassa istunnossa lisätyissä riveissä).
-    # Rivit, joilta nappi puuttuu, tyhjennetään korvaustilassa. Tyhjä = tyhjennä aina.
-    remove_row_button: str = "[id$='__remove']"
+    # Poistonappi rivin sisällä (Wilma: vain samalla sivulatauksella lisätyillä riveillä).
+    # Rivit, joilta nappi puuttuu, tyhjennetään korvaustilassa.
+    remove_row_button: str = "td:last-child button, td:last-child a, [id$='__remove']"
 
 
 @dataclass(frozen=True, slots=True)

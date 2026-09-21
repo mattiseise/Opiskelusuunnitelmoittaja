@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Slot
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtGui import QAction, QCloseEvent, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -29,7 +30,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QRadioButton,
-    QTableWidget,
+    QScrollArea,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
@@ -44,11 +45,28 @@ from ..filler import Summary
 from ..fillmode import FillMode
 from ..logsetup import setup_logging
 from . import theme
+from .preview_table import GRIP, GripDelegate, PreviewTable
 from .settings_dialog import SettingsDialog
-from .worker import FillWorker, QtLogHandler
+from .worker import FillWorker, QtLogHandler, ReadWorker
 
 log = logging.getLogger("suunnitelmoittaja.gui")
 TIME_FIELD = "suoritusajankohta"
+WILMA_SHEET = "Wilma"
+GRIP_COL = 0  # tarttuma raahaukseen
+CHECK_COL = 1
+SOURCE_COL = 2
+FIELD_COLUMN_OFFSET = 3  # 3… = kentät
+
+
+@dataclass
+class PreviewRow:
+    """Yksi esikatselun rivi. key = (lähde, järjestysnumero lähteessä), pysyy muokkauksissa."""
+
+    sheet: str
+    key: tuple[str, int]
+    values: dict[str, str]
+    checked: bool = True
+
 
 LEVEL_COLORS = {"WARNING": "#9C7A3A", "ERROR": "#69013B", "CRITICAL": "#4A0029"}
 
@@ -69,10 +87,12 @@ class MainWindow(QMainWindow):
         self.worker: FillWorker | None = None
         self._available_sheets: list[str] = []
         self._preview_sheets: list[Sheet] = []
-        self._preview_rows: list[tuple[Sheet, PlanRow]] = []
-        self._time_overrides: dict[
-            tuple[str, int], str
-        ] = {}  # (välilehti, rivi-indeksi) → ajankohta
+        self._preview_rows: list[PreviewRow] = []
+        self._edits: dict[tuple[str, int], dict[str, str]] = {}  # key → muokatut kentät
+        self._unchecked: set[tuple[str, int]] = set()
+        self._order: list[tuple[str, int]] = []  # käyttäjän järjestys, jos riviä siirretty
+        self._wilma_rows: list[PlanRow] = []
+        self.reader: ReadWorker | None = None
 
         self.setWindowTitle(APP_TITLE)
         self.resize(1080, 760)
@@ -160,11 +180,20 @@ class MainWindow(QMainWindow):
         outer.addLayout(body, 1)
 
         left = QWidget()
-        left.setFixedWidth(400)
         left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 32, 0)
+        left_layout.setContentsMargins(0, 0, 24, 0)
         left_layout.setSpacing(0)
-        body.addWidget(left)
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        left_scroll.setFixedWidth(420)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setStyleSheet(
+            "QScrollArea { background: transparent; } "
+            "QScrollArea > QWidget > QWidget { background: transparent; }"
+        )
+        body.addWidget(left_scroll)
 
         vline = QFrame()
         vline.setProperty("role", "vhairline")
@@ -178,7 +207,7 @@ class MainWindow(QMainWindow):
         body.addWidget(right, 1)
 
         # 1 · Chrome
-        left_layout.addLayout(self._step_header("1", "Chrome"))
+        left_layout.addLayout(self._step_header("1", "Käynnistä Chrome"))
         self.chrome_label = _label("Tarkistetaan yhteyttä…", "status-off")
         self.chrome_label.setWordWrap(True)
         left_layout.addWidget(self.chrome_label)
@@ -193,13 +222,31 @@ class MainWindow(QMainWindow):
         self.chrome_hint.setWordWrap(True)
         self.chrome_hint.setContentsMargins(0, 10, 0, 0)
         left_layout.addWidget(self.chrome_hint)
-        left_layout.addWidget(_hairline(top=22, bottom=22))
+        left_layout.addWidget(_hairline(top=16, bottom=16))
 
-        # 2 · Opiskelija
-        left_layout.addLayout(self._step_header("2", "Opiskelija"))
+        # 2 · Avaa opiskelijan opintokortti
+        left_layout.addLayout(self._step_header("2", "Avaa opiskelijan opintokortti"))
+        self.form_hint = _label(
+            "Siirry Chrome-ikkunassa Wilmaan, avaa opiskelijan opintokortti ja siitä "
+            "Opintosuunnitelma-lomake muokkaustilassa. Jätä välilehti auki: työkalu täyttää "
+            "sen taulukon.",
+            "muted",
+        )
+        self.form_hint.setWordWrap(True)
+        left_layout.addWidget(self.form_hint)
+        left_layout.addWidget(_hairline(top=16, bottom=16))
+
+        # 3 · Valitse opinnot
+        step3 = self._step_header("3", "Valitse opinnot")
+        btn_excel_help = QPushButton("Ohje Excelistä")
+        btn_excel_help.setProperty("variant", "link")
+        btn_excel_help.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_excel_help.clicked.connect(self.show_excel_help)
+        step3.addWidget(btn_excel_help)
+        left_layout.addLayout(step3)
         excel_caps = QHBoxLayout()
         excel_caps.setSpacing(6)
-        excel_caps.addWidget(_label("LÄHDE", "caps"))
+        excel_caps.addWidget(_label("LÄHDE-EXCEL", "caps"))
         excel_caps.addStretch()
         self.btn_open_excel = QPushButton("Avaa Excel")
         self.btn_open_excel.setProperty("variant", "link")
@@ -229,11 +276,19 @@ class MainWindow(QMainWindow):
             f"padding: 2px 0 6px 0; color: {theme.TOKENS['ink_soft']}; font-size: 13px;"
         )
         left_layout.addWidget(self.excel_edit)
+        self.excel_hint = _label(
+            "Yksi välilehti = yksi suunnitelma. Otsikkorivillä Osaamistavoite, Laajuus, "
+            "Suoritustapa / osaaminen hankitaan ja Suoritusajankohta.",
+            "muted",
+        )
+        self.excel_hint.setWordWrap(True)
+        self.excel_hint.setContentsMargins(0, 6, 0, 0)
+        left_layout.addWidget(self.excel_hint)
 
         self.group_main = QGroupBox()
         self.group_main.setFlat(True)
         gm = QVBoxLayout(self.group_main)
-        gm.setContentsMargins(0, 18, 0, 0)
+        gm.setContentsMargins(0, 12, 0, 0)
         gm.setSpacing(2)
         self.main_caps = _label("PÄÄSUUNTAUS", "caps")
         gm.addWidget(self.main_caps)
@@ -247,7 +302,7 @@ class MainWindow(QMainWindow):
         self.group_optional = QGroupBox()
         self.group_optional.setFlat(True)
         go = QVBoxLayout(self.group_optional)
-        go.setContentsMargins(0, 14, 0, 0)
+        go.setContentsMargins(0, 10, 0, 0)
         go.setSpacing(2)
         go.addWidget(_label("LISÄKSI", "caps"))
         self.optional_layout = QVBoxLayout()
@@ -255,7 +310,7 @@ class MainWindow(QMainWindow):
         go.addLayout(self.optional_layout)
         left_layout.addWidget(self.group_optional)
 
-        left_layout.addWidget(_hairline(top=16, bottom=6))
+        left_layout.addWidget(_hairline(top=12, bottom=4))
         self.manual_toggle = QCheckBox("Valitse välilehdet käsin")
         self.manual_toggle.toggled.connect(self._toggle_manual)
         left_layout.addWidget(self.manual_toggle)
@@ -276,35 +331,62 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.contact_hint)
         left_layout.addStretch()
 
-        # 3 · Esikatselu
-        step3 = self._step_header("3", "Esikatselu")
+        # 4 · Esikatselu ja muokkaus
+        step4 = self._step_header("4", "Esikatselu ja muokkaus")
+        self.btn_read_wilma = QPushButton("Hae nykyiset rivit Wilmasta")
+        self.btn_read_wilma.setProperty("variant", "link")
+        self.btn_read_wilma.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_read_wilma.setToolTip(
+            "Lukee avoimen opintosuunnitelmalomakkeen rivit esikatseluun, jossa niitä voi "
+            "muokata, järjestää ja yhdistää Excelin riveihin."
+        )
+        self.btn_read_wilma.clicked.connect(self.read_from_wilma)
+        step4.addWidget(self.btn_read_wilma)
+        step4.addWidget(_label("·", "muted"))
         self.btn_set_time = QPushButton("Aseta ajankohta valituille")
         self.btn_set_time.setProperty("variant", "link")
         self.btn_set_time.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_set_time.setToolTip(
             "Kirjoittaa saman suoritusajankohdan kaikille rastitetuille riveille. "
-            "Yksittäisen rivin ajankohtaa voi muokata kaksoisnapsauttamalla solua."
+            "Solua voi muokata myös kaksoisnapsauttamalla."
         )
         self.btn_set_time.clicked.connect(self.set_time_for_checked)
-        step3.addWidget(self.btn_set_time)
-        step3.addWidget(_label("·", "muted"))
+        step4.addWidget(self.btn_set_time)
+        step4.addWidget(_label("·", "muted"))
+        self.btn_up = QPushButton("▲")
+        self.btn_up.setProperty("variant", "link")
+        self.btn_up.setToolTip("Siirrä valittu rivi ylös")
+        self.btn_up.clicked.connect(lambda: self.move_current_row(-1))
+        self.btn_down = QPushButton("▼")
+        self.btn_down.setProperty("variant", "link")
+        self.btn_down.setToolTip("Siirrä valittu rivi alas")
+        self.btn_down.clicked.connect(lambda: self.move_current_row(1))
+        step4.addWidget(self.btn_up)
+        step4.addWidget(self.btn_down)
+        step4.addStretch()
         self.preview_label = _label("", "caps")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
-        step3.addWidget(self.preview_label)
-        right_layout.addLayout(step3)
-        self.preview = QTableWidget(0, 6)
+        step4.addWidget(self.preview_label)
+        right_layout.addLayout(step4)
+        self.preview = PreviewTable(0, 7)
         self.preview.setHorizontalHeaderLabels(
-            ["", "Välilehti", "Osaamistavoite", "Laajuus", "Suoritustapa", "Ajankohta"]
+            ["", "", "Lähde", "Osaamistavoite", "Laajuus", "Suoritustapa", "Ajankohta"]
         )
+        self.preview.row_moved.connect(self.move_row)
         hh = self.preview.horizontalHeader()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        hh.resizeSection(0, 36)
-        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
-        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        hh.setMinimumSectionSize(36)
+        hh.setSectionResizeMode(GRIP_COL, QHeaderView.ResizeMode.Fixed)
+        hh.resizeSection(GRIP_COL, 28)
+        self.preview.setItemDelegateForColumn(
+            GRIP_COL, GripDelegate(theme.TOKENS["gold"], self.preview)
+        )
+        hh.setSectionResizeMode(CHECK_COL, QHeaderView.ResizeMode.Fixed)
+        hh.resizeSection(CHECK_COL, 36)
+        hh.setSectionResizeMode(SOURCE_COL, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        hh.setMinimumSectionSize(28)
         self.preview.itemChanged.connect(self._on_preview_item_changed)
         # "Valitse kaikki / poista valinnat" -rasti otsikkorivin tyhjässä solussa
         self.header_check = QCheckBox(hh)
@@ -318,14 +400,14 @@ class MainWindow(QMainWindow):
         self._place_header_check()
         hh.setHighlightSections(False)
         self.preview.setFont(theme.sans(13))
-        # Vain Ajankohta-solut ovat muokattavia (ItemIsEditable asetetaan riveittäin)
+        # Kaikki kenttäsolut ovat muokattavia; rasti- ja lähdesolut eivät
         self.preview.setEditTriggers(
             QAbstractItemView.EditTrigger.DoubleClicked
             | QAbstractItemView.EditTrigger.EditKeyPressed
             | QAbstractItemView.EditTrigger.AnyKeyPressed
         )
         self.preview.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.preview.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+        self.preview.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.preview.setShowGrid(False)
         self.preview.setAlternatingRowColors(True)
         self.preview.verticalHeader().setVisible(False)
@@ -335,28 +417,38 @@ class MainWindow(QMainWindow):
 
         right_layout.addWidget(_hairline(top=22, bottom=22))
 
-        # 4 · Täyttö
-        right_layout.addLayout(self._step_header("4", "Täyttö"))
+        # 5 · Täyttö
+        right_layout.addLayout(self._step_header("5", "Täyttö"))
         right_layout.addWidget(_label("TÄYTTÖTAPA", "caps"))
         mode_row = QHBoxLayout()
         mode_row.setSpacing(18)
         mode_row.setContentsMargins(0, 4, 0, 0)
         self.mode_group = QButtonGroup(self)
         self.mode_group.setExclusive(True)
-        self.mode_buttons: dict[FillMode, QRadioButton] = {}
-        for mode in FillMode:
-            rb = QRadioButton(mode.label)
+        self.mode_append = QRadioButton("Lisää lomakkeen loppuun")
+        self.mode_replace = QRadioButton("Korvaa lomakkeen nykyiset rivit")
+        self.mode_complete = QRadioButton("Täydennä puuttuvat")
+        self.mode_buttons: dict[FillMode, QRadioButton] = {
+            FillMode.APPEND: self.mode_append,
+            FillMode.REPLACE: self.mode_replace,
+            FillMode.COMPLETE: self.mode_complete,
+        }
+        for mode, rb in self.mode_buttons.items():
             rb.setProperty("mode", mode.value)
             rb.setToolTip(mode.description)
             rb.toggled.connect(self._on_mode_changed)
             self.mode_group.addButton(rb)
-            self.mode_buttons[mode] = rb
             mode_row.addWidget(rb)
+        self.mode_replace.setToolTip(
+            "Kirjoittaa esikatselun rivit lomakkeen nykyisten rivien päälle. Käytä tätä, kun "
+            "olet hakenut rivit Wilmasta ja muokannut niitä. Wilmassa tallennettuja rivejä ei "
+            "voi poistaa napilla, joten ylijäävät jäävät tyhjiksi."
+        )
         mode_row.addStretch()
         right_layout.addLayout(mode_row)
         self.mode_hint = _label("", "muted")
         self.mode_hint.setWordWrap(True)
-        self.mode_hint.setContentsMargins(0, 4, 0, 14)
+        self.mode_hint.setContentsMargins(0, 4, 0, 10)
         right_layout.addWidget(self.mode_hint)
         # oletusvalinta asetetaan reload_configissa (QSettings → config.fill_mode)
         actions = QHBoxLayout()
@@ -541,83 +633,118 @@ class MainWindow(QMainWindow):
         return chosen
 
     def update_preview(self) -> None:
+        """Rakenna esikatselu: Wilman rivit, valitut Excel-välilehdet, yhteystietorivi.
+
+        Käyttäjän muokkaukset (_edits), rastien poistot (_unchecked) ja rivijärjestys
+        (_order) säilyvät avaimen (lähde, järjestysnumero) perusteella.
+        """
         names = self.selected_sheet_names()
-        sheets: list[Sheet] = []
+        rows: list[PreviewRow] = []
+        for i, wr in enumerate(self._wilma_rows):
+            rows.append(PreviewRow(WILMA_SHEET, (WILMA_SHEET, i), dict(wr.values)))
         for name in names:
             try:
-                sheets.append(read_sheet(self.excel_path, name, self.config.excel_columns))
+                sheet = read_sheet(self.excel_path, name, self.config.excel_columns)
             except ExcelError as exc:
                 log.error(str(exc))
+                continue
+            for i, r in enumerate(sheet.rows):
+                rows.append(PreviewRow(sheet.name, (sheet.name, i), dict(r.values)))
         if self.contact_check.isChecked():
             contact_sheet = self.config.teacher.sheet(self.config.field_names)
             if contact_sheet is not None:
-                sheets.append(contact_sheet)
+                rows.append(
+                    PreviewRow(
+                        contact_sheet.name,
+                        (contact_sheet.name, 0),
+                        dict(contact_sheet.rows[0].values),
+                    )
+                )
                 names = [*names, contact_sheet.name]
-        self._preview_sheets = sheets
-        self._preview_rows = [(sheet, row) for sheet in sheets for row in sheet.rows]
-        fields = self.config.field_names
+        if self._wilma_rows:
+            names = [WILMA_SHEET, *names]
 
+        for row in rows:
+            row.values.update(self._edits.get(row.key, {}))
+            row.checked = row.key not in self._unchecked
+        if self._order:
+            pos = {k: i for i, k in enumerate(self._order)}
+            rows.sort(key=lambda r: pos.get(r.key, len(pos)))
+        self._preview_rows = rows
+        self._render_preview()
+        self._refresh_preview_summary(names)
+
+    def _render_preview(self) -> None:
+        fields = self.config.field_names
         self.preview.blockSignals(True)
         self.preview.setRowCount(0)
-        for sheet, row in self._preview_rows:
+        for row in self._preview_rows:
             r = self.preview.rowCount()
             self.preview.insertRow(r)
+            grip = QTableWidgetItem(GRIP)
+            grip.setFlags(
+                Qt.ItemFlag.ItemIsEnabled
+                | Qt.ItemFlag.ItemIsSelectable
+                | Qt.ItemFlag.ItemIsDragEnabled
+            )
+            grip.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            grip.setForeground(QColor(theme.TOKENS["gold"]))
+            grip.setToolTip("Raahaa riviä uuteen paikkaan")
+            self.preview.setItem(r, GRIP_COL, grip)
             check = QTableWidgetItem()
-            check.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
-            check.setCheckState(Qt.CheckState.Checked)
-            self.preview.setItem(r, 0, check)
-            self.preview.setItem(r, 1, QTableWidgetItem(sheet.name))
-            for col, field in enumerate(fields[:4], start=2):
-                value = row.values.get(field, "")
-                item = QTableWidgetItem(value)
-                if field == TIME_FIELD:
-                    override = self._time_overrides.get(self._row_key(r))
-                    if override is not None:
-                        item.setText(override)
-                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
-                    item.setToolTip("Kaksoisnapsauta muokataksesi suoritusajankohtaa")
-                else:
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            check.setFlags(
+                Qt.ItemFlag.ItemIsUserCheckable
+                | Qt.ItemFlag.ItemIsEnabled
+                | Qt.ItemFlag.ItemIsSelectable
+                | Qt.ItemFlag.ItemIsDragEnabled
+            )
+            check.setCheckState(Qt.CheckState.Checked if row.checked else Qt.CheckState.Unchecked)
+            self.preview.setItem(r, CHECK_COL, check)
+            src = QTableWidgetItem(row.sheet)
+            src.setFlags(
+                (src.flags() & ~Qt.ItemFlag.ItemIsEditable) | Qt.ItemFlag.ItemIsDragEnabled
+            )
+            self.preview.setItem(r, SOURCE_COL, src)
+            for col, field in enumerate(fields[:4], start=FIELD_COLUMN_OFFSET):
+                item = QTableWidgetItem(row.values.get(field, ""))
+                item.setFlags(
+                    item.flags() | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDragEnabled
+                )
+                item.setToolTip("Kaksoisnapsauta muokataksesi")
                 self.preview.setItem(r, col, item)
         self.preview.blockSignals(False)
-        self._refresh_preview_summary(names)
 
     def checked_row_indices(self) -> list[int]:
         return [
             r
             for r in range(self.preview.rowCount())
-            if (item := self.preview.item(r, 0)) is not None
+            if (item := self.preview.item(r, CHECK_COL)) is not None
             and item.checkState() == Qt.CheckState.Checked
         ]
 
     def selected_sheets_for_fill(self) -> list[Sheet]:
-        """Esikatselussa rastitut rivit välilehdittäin, alkuperäisessä järjestyksessä."""
+        """Rastitut rivit taulukon järjestyksessä; peräkkäiset saman lähteen rivit yhdeksi
+        välilehdeksi, jotta välirivit tulevat lähteiden rajoille."""
         checked = set(self.checked_row_indices())
-        time_col = self._time_column()
         result: list[Sheet] = []
-        for sheet in self._preview_sheets:
-            rows: list[PlanRow] = []
-            for idx, (s, row) in enumerate(self._preview_rows):
-                if s is not sheet or idx not in checked:
-                    continue
-                item = self.preview.item(idx, time_col) if time_col is not None else None
-                if item is not None and item.text() != row.values.get(TIME_FIELD, ""):
-                    rows.append(PlanRow({**row.values, TIME_FIELD: item.text().strip()}))
-                else:
-                    rows.append(row)
-            if rows:
-                result.append(Sheet(sheet.name, rows))
+        for idx, row in enumerate(self._preview_rows):
+            if idx not in checked:
+                continue
+            plan = PlanRow({f: row.values.get(f, "") for f in self.config.field_names})
+            if result and result[-1].name == row.sheet:
+                result[-1].rows.append(plan)
+            else:
+                result.append(Sheet(row.sheet, [plan]))
         return result
 
     def _time_column(self) -> int | None:
         fields = self.config.field_names[:4]
-        return 2 + fields.index(TIME_FIELD) if TIME_FIELD in fields else None
+        return FIELD_COLUMN_OFFSET + fields.index(TIME_FIELD) if TIME_FIELD in fields else None
 
-    def _row_key(self, r: int) -> tuple[str, int]:
-        """Vakaa avain riville: (välilehti, rivin järjestysnumero välilehdellä)."""
-        sheet, _row = self._preview_rows[r]
-        first = next(i for i, (s, _r) in enumerate(self._preview_rows) if s is sheet)
-        return (sheet.name, r - first)
+    def _field_for_column(self, col: int) -> str | None:
+        fields = self.config.field_names[:4]
+        i = col - FIELD_COLUMN_OFFSET
+        return fields[i] if 0 <= i < len(fields) else None
 
     def set_time_for_checked(self) -> None:
         time_col = self._time_column()
@@ -640,8 +767,77 @@ class MainWindow(QMainWindow):
             item = self.preview.item(r, time_col)
             if item is not None:
                 item.setText(text.strip())
-                self._time_overrides[self._row_key(r)] = text.strip()
+            self._record_edit(r, TIME_FIELD, text.strip())
         self.preview.blockSignals(False)
+
+    def _record_edit(self, r: int, field: str, value: str) -> None:
+        row = self._preview_rows[r]
+        row.values[field] = value
+        self._edits.setdefault(row.key, {})[field] = value
+
+    def move_current_row(self, delta: int) -> None:
+        r = self.preview.currentRow()
+        self.move_row(r, r + delta)
+
+    def move_row(self, src: int, dst: int) -> None:
+        """Siirrä rivi paikasta src paikkaan dst (raahaus tai ▲▼)."""
+        rows = self._preview_rows
+        if src < 0 or not 0 <= dst < len(rows) or src == dst:
+            return
+        row = rows.pop(src)
+        rows.insert(dst, row)
+        self._order = [r.key for r in rows]
+        self._render_preview()
+        self.preview.selectRow(dst)
+        self._refresh_preview_summary(self.selected_sheet_names())
+
+    def read_from_wilma(self) -> None:
+        """Lue avoimen lomakkeen rivit esikatseluun (Wilma-lähde)."""
+        if self.reader is not None:
+            return
+        if not is_chrome_listening(self.config.browser):
+            QMessageBox.warning(
+                self, "Chrome ei ole käynnissä", "Käynnistä Chrome ja avaa opintokortti ensin."
+            )
+            return
+        self.btn_read_wilma.setEnabled(False)
+        self.statusBar().showMessage("Luetaan lomakkeen rivejä…")
+        self.reader = ReadWorker(self.config)
+        self.reader.finished_ok.connect(self._on_wilma_rows)
+        self.reader.failed.connect(self._on_wilma_failed)
+        self.reader.finished.connect(self._on_reader_done)
+        self.reader.start()
+
+    @Slot(object)
+    def _on_wilma_rows(self, rows: list[PlanRow]) -> None:
+        self._wilma_rows = list(rows)
+        # vanhat Wilma-muokkaukset eivät enää vastaa uutta lukua
+        for key in [k for k in self._edits if k[0] == WILMA_SHEET]:
+            del self._edits[key]
+        self._unchecked = {k for k in self._unchecked if k[0] != WILMA_SHEET}
+        self._order = []
+        self.update_preview()
+        if rows:
+            self.mode_replace.setChecked(True)
+            self.statusBar().showMessage(
+                f"Luettiin {len(rows)} riviä Wilmasta. Täyttötila: korvaa nykyiset rivit.", 6000
+            )
+        else:
+            self.statusBar().showMessage("Lomakkeella ei ole rivejä.", 4000)
+
+    @Slot(str)
+    def _on_wilma_failed(self, message: str) -> None:
+        log.error(message)
+        QMessageBox.critical(self, "Luku epäonnistui", message)
+
+    def _on_reader_done(self) -> None:
+        self.reader = None
+        self.btn_read_wilma.setEnabled(True)
+
+    def clear_wilma_rows(self) -> None:
+        self._wilma_rows = []
+        self._order = []
+        self.update_preview()
 
     def toggle_all_rows(self, *_args: object) -> None:
         """Otsikkorivin rasti: kaikki valittuna → poista valinnat, muuten → valitse kaikki."""
@@ -649,17 +845,34 @@ class MainWindow(QMainWindow):
         state = Qt.CheckState.Unchecked if all_checked else Qt.CheckState.Checked
         self.preview.blockSignals(True)
         for r in range(self.preview.rowCount()):
-            item = self.preview.item(r, 0)
+            item = self.preview.item(r, CHECK_COL)
             if item is not None:
                 item.setCheckState(state)
+            row = self._preview_rows[r]
+            row.checked = state == Qt.CheckState.Checked
+            if row.checked:
+                self._unchecked.discard(row.key)
+            else:
+                self._unchecked.add(row.key)
         self.preview.blockSignals(False)
         self._refresh_preview_summary(self.selected_sheet_names())
 
     def _on_preview_item_changed(self, item: QTableWidgetItem) -> None:
-        if item.column() == 0:
+        r = item.row()
+        if not 0 <= r < len(self._preview_rows):
+            return
+        if item.column() == CHECK_COL:
+            row = self._preview_rows[r]
+            row.checked = item.checkState() == Qt.CheckState.Checked
+            if row.checked:
+                self._unchecked.discard(row.key)
+            else:
+                self._unchecked.add(row.key)
             self._refresh_preview_summary(self.selected_sheet_names())
-        elif item.column() == self._time_column() and 0 <= item.row() < len(self._preview_rows):
-            self._time_overrides[self._row_key(item.row())] = item.text().strip()
+            return
+        field = self._field_for_column(item.column())
+        if field is not None:
+            self._record_edit(r, field, item.text().strip())
 
     def _refresh_preview_summary(self, names: list[str]) -> None:
         total = self.preview.rowCount()
@@ -681,11 +894,11 @@ class MainWindow(QMainWindow):
 
     def _place_header_check(self) -> None:
         hh = self.preview.horizontalHeader()
-        w = hh.sectionSize(0)
+        w = hh.sectionSize(CHECK_COL)
         h = hh.height()
         size = self.header_check.sizeHint()
         self.header_check.move(
-            hh.sectionViewportPosition(0) + max(0, (w - size.width()) // 2),
+            hh.sectionViewportPosition(CHECK_COL) + max(0, (w - size.width()) // 2),
             max(0, (h - size.height()) // 2),
         )
         self.header_check.raise_()
@@ -738,17 +951,15 @@ class MainWindow(QMainWindow):
             self.chrome_label.setText(f"Yhteys kunnossa{theme.MIDDOT}portti {port}")
             self.btn_chrome.setText("Chrome on käynnissä")
             self.btn_chrome.setEnabled(False)
-            self.chrome_hint.setText(
-                "Avaa Wilman opiskelusuunnitelmalomake Chrome-ikkunaan ja jatka kohtaan 2."
-            )
+            self.chrome_hint.setText("Chrome on auki. Jatka kohtaan 2.")
         else:
             _set_role(self.chrome_label, "status-off")
             self.chrome_label.setText(f"Ei yhteyttä{theme.MIDDOT}portti {port}")
             self.btn_chrome.setText("Käynnistä Chrome")
             self.btn_chrome.setEnabled(True)
             self.chrome_hint.setText(
-                "Chrome avataan erilliseen profiiliin, johon kirjautuminen säilyy. "
-                "Avaa lomakesivu siihen ikkunaan."
+                "Chrome avataan erilliseen profiiliin, johon Wilma-kirjautuminen säilyy "
+                "kertojen välillä."
             )
 
     def start_fill(self) -> None:
@@ -767,15 +978,15 @@ class MainWindow(QMainWindow):
             return
         mode = self.selected_fill_mode()
         text = (
-            f"Täytetään {total} riviä välilehdiltä:\n{', '.join(s.name for s in sheets)}\n\n"
+            f"Täytetään {total} riviä lähteistä:\n{', '.join(s.name for s in sheets)}\n\n"
             f"Täyttötapa: {mode.label}.\n{mode.description}\n\n"
-            "Varmista, että lomakesivu on auki Chromessa."
+            "Varmista, että opintokortin lomake on auki Chromessa."
         )
         if mode is FillMode.REPLACE:
             answer = QMessageBox.warning(
                 self,
-                "Korvataanko opintosuunnitelma?",
-                text + "\n\nLomakkeella nyt olevat rivit kirjoitetaan yli.",
+                "Korvataanko lomakkeen rivit?",
+                text + "\n\nLomakkeen nykyiset rivit KORVATAAN esikatselun riveillä.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -783,8 +994,6 @@ class MainWindow(QMainWindow):
             answer = QMessageBox.question(self, "Täytetäänkö lomake?", text)
         if answer != QMessageBox.StandardButton.Yes:
             return
-
-        from dataclasses import replace
 
         config = replace(self.config, separator_row_between_sheets=self.separator_check.isChecked())
         self.log_view.clear()
@@ -837,11 +1046,11 @@ class MainWindow(QMainWindow):
         if summary.skipped_rows:
             text += f"\nOhitettu {summary.skipped_rows} riviä, jotka olivat jo lomakkeella."
         if summary.removed_rows:
-            text += f"\nPoistettu {summary.removed_rows} ylimääräistä riviä."
+            text += f"\nPoistettu {summary.removed_rows} riviä poistonapilla."
         if summary.cleared_rows:
             text += (
-                f"\nTyhjennetty {summary.cleared_rows} ylimääräistä riviä. "
-                "Poista ne Wilmassa käsin."
+                f"\nLomakkeen loppuun jäi {summary.cleared_rows} tyhjää riviä. "
+                "Poista ne Wilmassa käsin ennen tallennusta."
             )
         if summary.failed_rows:
             text += f"\nVirheitä {summary.total_errors}. Katso loki: {self.config.log_file}"
@@ -868,6 +1077,23 @@ class MainWindow(QMainWindow):
             )
         else:
             self.log_view.appendPlainText(message)
+
+    def show_excel_help(self) -> None:
+        QMessageBox.information(
+            self,
+            "Lähde-Excel",
+            "<b>Miten Excel rakennetaan</b><br><br>"
+            "Jokainen välilehti on yksi suunnitelma tai suunnitelman osa (esim. "
+            "Ohjelmistokehittäjä, Kyber, Lukio, YTO). Ensimmäinen rivi on otsikkorivi, ja "
+            "siltä pitää löytyä otsikot <i>Osaamistavoite</i>, <i>Laajuus</i>, "
+            "<i>Suoritustapa / osaaminen hankitaan</i> ja <i>Suoritusajankohta</i> "
+            "(kirjainkoko ei haittaa). Jokainen seuraava rivi on yksi lomakkeen rivi.<br><br>"
+            "Kokonaan tyhjät rivit ohitetaan. Numerot muotoillaan siististi (25.0 → 25). "
+            "Tyhjä solu täytetään lomakkeelle välilyönnillä, koska Wilma ei hyväksy tyhjää "
+            "kenttää.<br><br>"
+            "Pääsuuntaukset ja kyllä/ei-kysymykset kytketään välilehtiin Asetukset → Kysely. "
+            "Toisen Excel-tiedoston voi valita <i>Vaihda</i>-linkistä; valinta muistetaan.",
+        )
 
     def open_log_file(self) -> None:
         self._open_path(self.config.log_file)

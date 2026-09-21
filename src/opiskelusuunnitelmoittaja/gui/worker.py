@@ -11,7 +11,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from ..browser import BrowserError, connect, find_form_page
 from ..config import Config
-from ..excel import Sheet
+from ..excel import PlanRow, Sheet
 from ..filler import FormFiller, Summary
 from ..fillmode import FillMode
 
@@ -48,15 +48,22 @@ class FillWorker(QThread):
         *,
         dry_run: bool = False,
         mode: FillMode | None = None,
+        replace_existing: bool = False,
     ) -> None:
         super().__init__()
         self.config = config
         self.sheets = sheets
         self.dry_run = dry_run
-        self.mode = mode if mode is not None else config.fill_mode
+        if mode is None:
+            mode = FillMode.REPLACE if replace_existing else config.fill_mode
+        self.mode = mode
         self._stop = threading.Event()
         self._done = 0
         self._total = sum(len(s.rows) for s in sheets)
+
+    @property
+    def replace_existing(self) -> bool:
+        return self.mode is FillMode.REPLACE
 
     def request_stop(self) -> None:
         self._stop.set()
@@ -90,8 +97,36 @@ class FillWorker(QThread):
                     progress=self._on_progress,
                     stop_requested=self._stop.is_set,
                 )
+                if self.replace_existing:
+                    self.progress.emit(0, self._total, "Poistetaan nykyiset rivit…")
+                    filler.clear_rows()
                 summary: Summary = filler.process_sheets(self.sheets)
             self.finished_ok.emit(summary)
+        except BrowserError as exc:
+            self.failed.emit(str(exc))
+        except Exception as exc:
+            logging.getLogger("suunnitelmoittaja.gui").debug(traceback.format_exc())
+            self.failed.emit(f"Odottamaton virhe: {exc}")
+
+
+class ReadWorker(QThread):
+    """Lukee lomakkeen nykyiset rivit avoimelta Wilma-välilehdeltä."""
+
+    finished_ok = Signal(object)  # list[PlanRow]
+    failed = Signal(str)
+
+    def __init__(self, config: Config) -> None:
+        super().__init__()
+        self.config = config
+
+    def run(self) -> None:
+        try:
+            with connect(self.config.browser) as browser:
+                page = find_form_page(
+                    browser, self.config.browser, self.config.selectors.table_body
+                )
+                rows: list[PlanRow] = FormFiller(page, self.config).read_rows()
+            self.finished_ok.emit(rows)
         except BrowserError as exc:
             self.failed.emit(str(exc))
         except Exception as exc:

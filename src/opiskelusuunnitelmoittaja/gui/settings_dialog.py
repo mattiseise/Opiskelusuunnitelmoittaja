@@ -218,7 +218,7 @@ class SettingsDialog(QDialog):
         form.addRow("Lisää rivi -nappi", self.add_row_button)
         self.remove_row_button = QLineEdit(s.remove_row_button)
         self.remove_row_button.setPlaceholderText(
-            "esim. [id$='__remove'] – tyhjä = ylimääräiset rivit tyhjennetään korvaustilassa"
+            "tyhjä = ylimääräiset rivit tyhjennetään korvaustilassa"
         )
         self.remove_row_button.setToolTip(
             "Wilmassa vain samassa istunnossa lisätyillä riveillä on poistonappi. Tallennetut "
