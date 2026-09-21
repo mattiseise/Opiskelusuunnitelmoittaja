@@ -123,22 +123,30 @@ git push origin v2.1.0
 
 ## Käyttö ikkunassa
 
-1. **Käynnistä Chrome** avaa Chromen erilliseen profiiliin, johon kirjautuminen säilyy.
-   Tila näkyy tekstinä: burgundi "Yhteys kunnossa · portti 9222", kun yhteys on.
-2. Avaa Wilman opiskelusuunnitelmalomake siihen Chrome-ikkunaan.
-3. Valitse pääsuuntaus ja rastita lisävalinnat (lukio, YTO, väylä), tai valitse välilehdet käsin.
-   Esikatselu näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
-4. Rastita esikatselusta vietävät rivit (oletuksena kaikki; otsikkorivin rasti valitsee tai
-   poistaa kaikki kerralla). *Ajankohta*-solua voi muokata kaksoisnapsauttamalla, ja
-   *Aseta ajankohta valituille* kirjoittaa saman ajankohdan kaikille rastitetuille riveille
-   (esim. `8/2026–5/2027`). Muokkaukset viedään lomakkeelle Excelin arvon sijaan.
+Ikkuna kulkee viidessä vaiheessa:
+
+1. **Käynnistä Chrome.** Nappi avaa Chromen erilliseen profiiliin, johon Wilma-kirjautuminen
+   säilyy kertojen välillä. Tila näkyy tekstinä ("Yhteys kunnossa · portti 9222").
+2. **Avaa opiskelijan opintokortti.** Siirry Chrome-ikkunassa Wilmaan, avaa opiskelijan
+   opintokortti ja siitä Opintosuunnitelma-lomake muokkaustilassa. Jätä välilehti auki.
+3. **Valitse opinnot.** Valitse lähde-Excel (muistetaan), pääsuuntaus ja lisävalinnat (lukio,
+   YTO, väylä), tai välilehdet käsin. *Ohje Excelistä* kertoo, miten Excel rakennetaan.
+4. **Esikatselu ja muokkaus.** Taulukko näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
+   Jokaisen solun voi muokata kaksoisnapsauttamalla, rivin rastin voi poistaa, otsikkorivin rasti
+   valitsee tai poistaa kaikki, *Aseta ajankohta valituille* kirjoittaa saman ajankohdan
+   rastitetuille, ja ▲▼ siirtävät valittua riviä. *Hae nykyiset rivit Wilmasta* lukee avoimen
+   lomakkeen rivit esikatseluun lähteenä *Wilma*: näin opiskelijan olemassa olevaa suunnitelmaa
+   voi järjestellä, muokata ja täydentää Excelin riveillä ilman Wilman käsityötä.
 
    ![Esikatselu muokattuna](docs/kuvat/02-esikatselu-muokattu.png)
 
-5. Paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin
-   jälkeen.
+5. **Täyttö.** Valitse *Lisää lomakkeen loppuun* tai *Korvaa lomakkeen nykyiset rivit* (oletus,
+   kun rivit on haettu Wilmasta: poistaa lomakkeen rivit poistonapilla ja kirjoittaa esikatselun
+   rivit tilalle) ja paina **Täytä lomake**. Eteneminen ja loki näkyvät ikkunassa; *Keskeytä*
+   pysäyttää rivin jälkeen.
 
    ![Täyttö käynnissä](docs/kuvat/03-taytto.png)
+
 6. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
 
 Kysymykset, Excel-otsikot, lomakkeen valitsimet ja Chromen portti muokataan *Asetukset*-ikkunassa.
@@ -231,6 +239,7 @@ Kaikki avaimet ovat valinnaisia; puuttuvat täydennetään oletuksilla.
   "selectors": {
     "table_body": "table:has(th:has-text(\"Osaamistavoite\")) tbody",  // vain opintotaulukko
     "add_row_button": "[id$='__add']",
+    "remove_row_button": "td:last-child button, td:last-child a, [id$='__remove']",  // korvaustilan poistonappi
     "field_cells": {
       "osaamistavoite": "td:nth-child(1)",
       "laajuus": "td:nth-child(2)",

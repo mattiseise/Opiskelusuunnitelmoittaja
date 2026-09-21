@@ -72,6 +72,7 @@ class Selectors:
         }
     )
     input_in_cell: str = "input, textarea, select"
+    remove_row_button: str = "td:last-child button, td:last-child a, [id$='__remove']"
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +152,7 @@ def config_from_dict(raw: dict[str, Any], *, base_dir: Path | None = None) -> Co
             add_row_button=selectors.get("add_row_button", ds.add_row_button),
             field_cells=dict(selectors.get("field_cells", ds.field_cells)),
             input_in_cell=selectors.get("input_in_cell", ds.input_in_cell),
+            remove_row_button=selectors.get("remove_row_button", ds.remove_row_button),
         ),
         excel_columns=dict(raw.get("excel_columns", d.excel_columns)),
         empty_value=str(raw.get("empty_value", d.empty_value)),
@@ -193,6 +195,7 @@ def config_to_dict(config: Config, *, base_dir: Path | None = None) -> dict[str,
             "add_row_button": config.selectors.add_row_button,
             "field_cells": dict(config.selectors.field_cells),
             "input_in_cell": config.selectors.input_in_cell,
+            "remove_row_button": config.selectors.remove_row_button,
         },
         "excel_columns": dict(config.excel_columns),
         "empty_value": config.empty_value,

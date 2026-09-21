@@ -94,6 +94,73 @@ class FormFiller:
                 self._add_separator_row(sheet.name)
         return Summary(results)
 
+    def read_rows(self) -> list[PlanRow]:
+        """Lue lomakkeen nykyiset rivit (kentät config.field_names-järjestyksessä).
+
+        Tyhjät rivit ohitetaan. Käytetään, kun opiskelijan olemassa oleva suunnitelma
+        halutaan esikatseluun muokattavaksi.
+        """
+        rows: list[PlanRow] = []
+        table_rows = self._rows()
+        for i in range(table_rows.count()):
+            tr = table_rows.nth(i)
+            values: dict[str, str] = {}
+            for field_name in self.config.field_names:
+                cell_selector = self.selectors.field_cells.get(field_name)
+                if not cell_selector:
+                    values[field_name] = ""
+                    continue
+                control = tr.locator(cell_selector).locator(self.selectors.input_in_cell).first
+                values[field_name] = control.input_value().strip() if control.count() > 0 else ""
+            row = PlanRow(values)
+            if not row.is_empty():
+                rows.append(row)
+        log.info("Luettiin lomakkeelta %d riviä", len(rows))
+        return rows
+
+    def clear_rows(self) -> int:
+        """Poista lomakkeen kaikki rivit poistonapilla; palauttaa poistettujen määrän.
+
+        Viimeistä riviä ei voi Wilmassa poistaa (siinä ei ole poistonappia), joten sen
+        kentät tyhjennetään ja se käytetään ensimmäiselle uudelle riville.
+        """
+        if self.dry_run:
+            log.info("[kuiva-ajo] rivien poisto")
+            return 0
+        removed = 0
+        for _ in range(500):  # turvaraja
+            rows = self._rows()
+            count = rows.count()
+            button = None
+            for i in range(count - 1, -1, -1):
+                candidate = rows.nth(i).locator(self.selectors.remove_row_button)
+                if candidate.count() > 0:
+                    button = candidate.first
+                    break
+            if button is None:
+                break
+            button.click()
+            self.page.wait_for_function(
+                "([el, n]) => el.querySelectorAll(':scope > tr').length < n",
+                arg=[self._tbody().element_handle(), count],
+            )
+            removed += 1
+        # jäljelle jääneet rivit tyhjennetään
+        rows = self._rows()
+        for i in range(rows.count()):
+            for field_name in self.config.field_names:
+                cell_selector = self.selectors.field_cells.get(field_name)
+                if not cell_selector:
+                    continue
+                control = (
+                    rows.nth(i).locator(cell_selector).locator(self.selectors.input_in_cell).first
+                )
+                if control.count() > 0:
+                    control.fill("")
+        self._first_row_done = False
+        log.info("Poistettiin %d riviä, %d tyhjennettiin", removed, rows.count())
+        return removed
+
     def process_sheet(self, sheet: Sheet) -> SheetResult:
         result = SheetResult(sheet.name, len(sheet.rows))
         log.info("Aloitetaan välilehti '%s' (%d riviä)", sheet.name, len(sheet.rows))

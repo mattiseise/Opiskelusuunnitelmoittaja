@@ -40,7 +40,10 @@
         td.appendChild(input);
         tr.appendChild(td);
       }
-      tr.appendChild(document.createElement('td'));
+      const last = document.createElement('td');
+      const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = '−';
+      rm.className = 'remove'; rm.addEventListener('click', () => tr.remove());
+      last.appendChild(rm); tr.appendChild(last);
       document.getElementById(tbodyId).appendChild(tr);
     }, 50);
   }

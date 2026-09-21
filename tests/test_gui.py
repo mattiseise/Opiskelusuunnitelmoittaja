@@ -143,7 +143,8 @@ def test_time_column_editable_and_applied(qtbot, config_path: Path) -> None:
     assert col == 5
     cell = win.preview.item(0, col)
     assert cell is not None and bool(cell.flags() & Qt.ItemFlag.ItemIsEditable)
-    assert not bool(win.preview.item(0, 2).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
+    assert bool(win.preview.item(0, 2).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
+    assert not bool(win.preview.item(0, 1).flags() & Qt.ItemFlag.ItemIsEditable)  # type: ignore[union-attr]
 
     cell.setText("8/2026–5/2027")
     sheets = win.selected_sheets_for_fill()
@@ -154,6 +155,65 @@ def test_time_column_editable_and_applied(qtbot, config_path: Path) -> None:
     win.contact_check.setChecked(False)
     win.update_preview()
     assert win.preview.item(0, col).text() == "8/2026–5/2027"  # type: ignore[union-attr]
+
+
+def test_wilma_rows_edit_reorder_and_replace_mode(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.excel import PlanRow
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert win.mode_append.isChecked()
+    assert win.preview.rowCount() == 2  # Excel: Ohjelmointi, Tietoturva
+
+    wilma = [
+        PlanRow(
+            {"osaamistavoite": "W1", "laajuus": "5", "suoritustapa": "x", "suoritusajankohta": ""}
+        ),
+        PlanRow(
+            {"osaamistavoite": "W2", "laajuus": "6", "suoritustapa": "y", "suoritusajankohta": ""}
+        ),
+    ]
+    win._on_wilma_rows(wilma)
+    assert win.mode_replace.isChecked()
+    assert [win.preview.item(r, 1).text() for r in range(4)] == [  # type: ignore[union-attr]
+        "Wilma",
+        "Wilma",
+        "Ohjelmistokehittäjä",
+        "Ohjelmistokehittäjä",
+    ]  # type: ignore[union-attr]
+    assert win.preview_label.text().startswith("4 RIVIÄ · WILMA, OHJELMISTOKEHITTÄJÄ")
+
+    # muokkaa Wilma-rivin osaamistavoitetta ja siirrä Excel-rivi ylimmäksi
+    win.preview.item(0, 2).setText("W1 muokattu")  # type: ignore[union-attr]
+    win.preview.selectRow(2)
+    win.move_current_row(-1)
+    win.move_current_row(-1)
+    assert win.preview.item(0, 2).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(1, 2).text() == "W1 muokattu"  # type: ignore[union-attr]
+
+    sheets = win.selected_sheets_for_fill()
+    assert [(s.name, [r.values["osaamistavoite"] for r in s.rows]) for s in sheets] == [
+        ("Ohjelmistokehittäjä", ["Ohjelmointi"]),
+        ("Wilma", ["W1 muokattu", "W2"]),
+        ("Ohjelmistokehittäjä", ["Tietoturva"]),
+    ]
+
+    # järjestys ja muokkaus säilyvät, kun esikatselu rakennetaan uudelleen
+    win.contact_check.setChecked(True)
+    win.update_preview()
+    assert win.preview.item(0, 2).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.preview.item(1, 2).text() == "W1 muokattu"  # type: ignore[union-attr]
+
+    win.clear_wilma_rows()
+    assert win.preview.rowCount() == 2
+
+
+def test_fill_worker_replace_mode_clears_first(qtbot, config_path: Path, excel_file: Path) -> None:
+    """replace_existing kulkee workerille (oikea selain testataan test_filler:ssä)."""
+    config = load_config(config_path)
+    sheets = [read_sheet(excel_file, "Kyber", config.excel_columns)]
+    worker = FillWorker(config, sheets, replace_existing=True)
+    assert worker.replace_existing is True
 
 
 def test_settings_dialog_opens_teacher_tab_first(qtbot, config_path: Path) -> None:

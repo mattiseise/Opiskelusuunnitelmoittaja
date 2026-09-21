@@ -129,3 +129,25 @@ def test_progress_callback_is_called(page: Page, lomake_url: str) -> None:
         Sheet("A", [_row("A1", "1"), _row("A2", "2")])
     )
     assert messages == ["  A: rivi 1/2", "  A: rivi 2/2"]
+
+
+def test_read_rows_and_clear_rows(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    filler = FormFiller(page, CFG)
+    filler.fill_new_row(_row("A1", "1", "Tapa", "8/2026"))
+    filler.fill_new_row(_row("A2", "2"))
+    filler.fill_new_row(_row("A3", "3"))
+    assert len(_table_values(page)) == 3
+
+    rows = FormFiller(page, CFG).read_rows()
+    assert [r.values["osaamistavoite"] for r in rows] == ["A1", "A2", "A3"]
+    assert rows[0].values["suoritusajankohta"] == "8/2026"
+    assert rows[1].values["suoritusajankohta"] == ""  # välilyönti trimmataan
+
+    clearer = FormFiller(page, CFG)
+    removed = clearer.clear_rows()
+    assert removed == 2  # ensimmäisellä rivillä ei ole poistonappia
+    assert _table_values(page) == [["", "", "", ""]]
+    # tyhjennetty rivi käytetään uudelleen
+    clearer.fill_new_row(_row("B1", "9"))
+    assert _table_values(page)[0][0] == "B1" and len(_table_values(page)) == 1
