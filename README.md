@@ -130,7 +130,8 @@ Ikkuna kulkee viidessä vaiheessa:
 2. **Avaa opiskelijan opintokortti.** Siirry Chrome-ikkunassa Wilmaan, avaa opiskelijan
    opintokortti ja siitä Opintosuunnitelma-lomake muokkaustilassa. Jätä välilehti auki.
 3. **Valitse opinnot.** Rivit tulevat esikatseluun kahdesta lähteestä, ja molempia voi käyttää
-   yhtä aikaa. **Wilma:** *Hae nykyiset rivit Wilmasta* lukee kohdassa 2 avatun lomakkeen rivit
+   yhtä aikaa; kohta on jaettu väliotsikoihin *A · Nykyinen suunnitelma Wilmasta*, *B · Pohja
+   Excelistä* ja *C · Muut valinnat*. **Wilma:** *Hae nykyiset rivit Wilmasta* lukee kohdassa 2 avatun lomakkeen rivit
    esikatseluun lähteenä *Wilma*. Haku vaihtaa pääsuuntauksen vaihtoehtoon *Ei pääsuuntausta
    Excelistä*; suuntauksen voi valita takaisin, jos Excelin rivit halutaan mukaan. *Poista*
    tyhjentää Wilman rivit esikatselusta. **Excel:** valitse lähde-Excel (muistetaan; *Avaa
