@@ -70,7 +70,7 @@
     "email": "",
     "phone": "",
     "template": "Opiskelijalla on henkilökohtainen opintosuunnitelma ja hän etenee siinä omaan tahtiinsa. Mikäli opintosuunnitelmasta on kysyttävää: <Nimi>, sähköposti: <sähköpostiosoite> tai puhelimitse: <puhelinnumero>",
-    "field": "osaamistavoite",
+    "field": "suoritustapa",
     "default": true
   },
   "fill": {

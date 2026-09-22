@@ -147,6 +147,15 @@ def build_qss() -> str:
         selection-color: {t["on_section"]};
     }}
     QLineEdit:focus, QSpinBox:focus, QPlainTextEdit:focus, QComboBox:focus {{ border: 1px solid {t["brand"]}; }}
+    QComboBox::drop-down {{ border: none; width: 24px; }}
+    /* Pudotusvalikon lista: ilman tätä Windowsin tumma teema piirtää mustan tekstin mustalle. */
+    QComboBox QAbstractItemView {{
+        background: {t["bg"]}; color: {t["ink"]};
+        border: 1px solid {t["hairline_strong"]}; outline: none; padding: 4px 0;
+        selection-background-color: {t["brand"]}; selection-color: {t["on_section"]};
+    }}
+    QComboBox QAbstractItemView::item {{ padding: 6px 10px; min-height: 24px; }}
+    QComboBox QAbstractItemView::item:hover {{ background: {t["bg2"]}; color: {t["ink"]}; }}
     QLineEdit:read-only {{ background: {t["bg2"]}; color: {t["ink_soft"]}; }}
     QSpinBox::up-button, QSpinBox::down-button {{ width: 0; border: none; }}
     QDialog QLabel {{ font-size: 13px; }}

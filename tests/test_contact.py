@@ -40,3 +40,13 @@ def test_config_roundtrip_defaults() -> None:
     assert cfg.teacher.template == DEFAULT_TEMPLATE
     assert cfg.teacher.default is False
     assert config_from_dict({}).teacher == TeacherContact()
+
+
+def test_default_field_is_suoritustapa() -> None:
+    assert TeacherContact().field == "suoritustapa"
+    assert TeacherContact.from_dict({"name": "X"}).field == "suoritustapa"
+    sheet = TeacherContact(name="X").sheet(FIELDS)
+    assert sheet is not None
+    values = sheet.rows[0].values
+    assert values["suoritustapa"].startswith("Opiskelijalla on")
+    assert values["osaamistavoite"] == ""

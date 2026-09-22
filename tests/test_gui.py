@@ -133,10 +133,12 @@ def test_contact_row_in_preview_and_settings(qtbot, config_path: Path) -> None:
     assert win.preview.rowCount() == 4
     assert win.preview.item(2, 2).text() == "Välirivi"  # type: ignore[union-attr]
     assert win.preview.item(2, 3).text() == ""  # type: ignore[union-attr]
-    last = win.preview.item(3, 3).text()  # type: ignore[union-attr]
+    # yhteystietoteksti menee oletuksena Suoritustapa-kenttään (sarake 5)
+    last = win.preview.item(3, 5).text()  # type: ignore[union-attr]
     assert last.startswith("Opiskelijalla on henkilökohtainen opintosuunnitelma")
     assert "Matti Seise, sähköposti: matti.seise@bc.fi tai puhelimitse: 041 534 5404" in last
     assert win.preview.item(3, 2).text() == "Yhteystiedot"  # type: ignore[union-attr]
+    assert win.preview.item(3, 3).text() == ""  # type: ignore[union-attr]
     assert win.preview.item(3, 4).text() == ""  # type: ignore[union-attr]
     sheets = win.selected_sheets_for_fill()
     assert [s.name for s in sheets] == ["Ohjelmistokehittäjä", "Välirivi", "Yhteystiedot"]

@@ -323,7 +323,7 @@ class SettingsDialog(QDialog):
                 email=self.teacher_email.text().strip(),
                 phone=self.teacher_phone.text().strip(),
                 template=self.teacher_template.toPlainText().strip() or DEFAULT_TEMPLATE,
-                field=self.teacher_field.currentText() or "osaamistavoite",
+                field=self.teacher_field.currentText() or "suoritustapa",
                 default=self.teacher_default.isChecked(),
             ),
             empty_value=self.empty_value.text(),

@@ -22,7 +22,7 @@ class TeacherContact:
     email: str = ""
     phone: str = ""
     template: str = DEFAULT_TEMPLATE
-    field: str = "osaamistavoite"  # kenttä, johon teksti kirjoitetaan
+    field: str = "suoritustapa"  # kenttä, johon teksti kirjoitetaan
     default: bool = True  # kysymyksen oletusvastaus
 
     @classmethod
@@ -32,7 +32,7 @@ class TeacherContact:
             email=str(raw.get("email", "")).strip(),
             phone=str(raw.get("phone", "")).strip(),
             template=str(raw.get("template") or DEFAULT_TEMPLATE),
-            field=str(raw.get("field") or "osaamistavoite"),
+            field=str(raw.get("field") or "suoritustapa"),
             default=bool(raw.get("default", True)),
         )
 
