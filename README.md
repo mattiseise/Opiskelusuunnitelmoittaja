@@ -12,23 +12,39 @@ pandas openpyxl:llä, ja projekti käyttää `pyproject.toml`-määrittelyä ja 
 Toimii macOS:llä, Windowsilla ja Linuxilla. Versiossa 2.1 on graafinen käyttöliittymä ja
 valmiit sovelluspaketit.
 
+**Käyttäjälle:** valmis sovellus ladataan [Releases-sivulta](https://github.com/mattiseise/Opiskelusuunnitelmoittaja/releases/latest),
+ei tästä lähdekoodista – ks. [Asennus](#asennus).
+
 ![Pääikkuna](docs/kuvat/01-paaikkuna.png)
 
 *Kuvien data on keksittyä esimerkkidataa.*
 
-## Pikaohjeet alustoittain
+## Asennus
+
+> **Lataa valmis sovellus GitHubin Releases-sivulta:**
+> **<https://github.com/mattiseise/Opiskelusuunnitelmoittaja/releases/latest>**
+>
+> Tätä repon etusivua tai vihreää *Code*-nappia ei tarvita: ne ovat lähdekoodia kehittäjille.
+> Releases-sivulla uusin versio on ylimpänä, ja asennettavat tiedostot ovat sen kohdassa
+> **Assets** (avaa se, jos lista on supistettuna). Valitse oman koneesi tiedosto:
+>
+> | Kone | Ladattava tiedosto |
+> |---|---|
+> | Mac (Apple Silicon, M1–M4) | `OpintosuunnitelmanTayttaja-<versio>-macos-arm64.dmg` |
+> | Windows 10/11 | `OpintosuunnitelmanTayttaja-<versio>-windows-x64.zip` |
+>
+> `.sha256`-tiedostot ja *Source code* -paketit voi jättää huomiotta.
 
 Sovellus tarvitsee koneelta Google Chromen. Kaikki muu (Python, Playwright-ajuri, fontit)
-tulee paketin mukana. Pakettien latauspaikka: [Releases](https://github.com/mattiseise/Opiskelusuunnitelmoittaja/releases).
+tulee paketin mukana. Asennus ei vaadi järjestelmänvalvojan oikeuksia.
 
 ### macOS
 
-**Valmis sovellus**
-
-1. Lataa `OpintosuunnitelmanTayttaja-<versio>-macos-arm64.dmg`, avaa se ja vedä
-   *Opintosuunnitelman muokkaaja* Ohjelmat-kansioon.
-2. Ensimmäisellä avauksella macOS voi estää ad hoc -allekirjoitetun paketin. Salli se joko
-   Järjestelmäasetukset → Tietosuoja ja suojaus → *Avaa silti*, tai Terminaalissa:
+1. Avaa ladattu `.dmg` ja vedä *Opintosuunnitelman muokkaaja* Ohjelmat-kansioon.
+2. Ensimmäisellä avauksella macOS estää sovelluksen, koska paketti on allekirjoitettu ad hoc
+   eikä Applen notarisoima. Salli se: **Järjestelmäasetukset → Tietosuoja ja suojaus**, rullaa
+   alas kohtaan *"Opintosuunnitelman muokkaaja" estettiin* ja paina **Avaa silti**. Vaihtoehto
+   Terminaalissa:
 
    ```bash
    xattr -dr com.apple.quarantine "/Applications/Opintosuunnitelman muokkaaja.app"
@@ -38,9 +54,63 @@ tulee paketin mukana. Pakettien latauspaikka: [Releases](https://github.com/matt
 
 Asetukset ja Excel-pohja kopioidaan ensimmäisellä käynnistyksellä kansioon
 `~/Library/Application Support/OpintosuunnitelmanTayttaja/` (Tiedosto → *Avaa asetuskansio*).
-Myös kehitysversio käyttää tätä kansiota, joten opettajan yhteystiedot eivät päädy repon
-`config.json`-tiedostoon; komentorivi (`uv run suunnitelmoittaja`) lukee edelleen repon
-`config.json`-tiedostoa, tai annetun `-c`-tiedoston.
+
+### Windows 11 (ja 10)
+
+1. Pura ladattu `.zip` kansioon, joka jää pysyvästi paikalleen, esimerkiksi
+   `C:\Ohjelmat\OpintosuunnitelmanTayttaja\` (hiiren oikea → *Pura kaikki…*). Älä käynnistä
+   ohjelmaa suoraan zip-paketin sisältä.
+2. Käynnistä `OpintosuunnitelmanTayttaja.exe`.
+3. Pikakuvake: hiiren oikea exe-tiedostoon → *Näytä lisää vaihtoehtoja* → *Lähetä kohteeseen* →
+   *Työpöytä (luo pikakuvake)*, tai kiinnitä käynnissä oleva sovellus tehtäväpalkkiin.
+
+Asetukset ja Excel-pohja kopioidaan ensimmäisellä käynnistyksellä kansioon
+`%APPDATA%\OpintosuunnitelmanTayttaja\` (Tiedosto → *Avaa asetuskansio*).
+
+#### SmartScreen ja Defender Windows 11:ssä
+
+Paketti ei ole koodiallekirjoitettu, joten Windows kohtelee sitä tuntemattomana ohjelmana. Se on
+odotettua, ei merkki viruksesta. Tilanteet ja niiden ratkaisut, kevyimmästä alkaen:
+
+**Selain varoittaa latauksesta** ("tätä tiedostoa ei ladata yleisesti" / "saattaa olla
+vaarallinen"). Chrome: latauslistassa tiedoston kohdalla *⋮* tai nuoli → **Säilytä** (tai
+*Säilytä silti*). Edge: latauslistassa *…* → **Säilytä** → *Näytä lisää* → **Säilytä silti**.
+
+**Sininen "Windows suojasi tietokonettasi" -ikkuna käynnistettäessä.** Tämä on SmartScreen.
+Paina ikkunassa **Lisätietoja** (pieni linkki tekstin alla), jolloin näkyviin tulee nappi
+**Suorita silti**. Windows muistaa valinnan tälle tiedostolle; varoitus voi tulla uudelleen
+seuraavan version jälkeen.
+
+**"Suorita silti" ei näy tai ohjelma ei käynnisty.** Exe voi olla merkitty internetistä
+ladatuksi. Hiiren oikea `OpintosuunnitelmanTayttaja.exe` → **Ominaisuudet** → välilehti
+*Yleiset* → alareunassa *Suojaus: tämä tiedosto on peräisin toisesta tietokoneesta…* → rasti
+**Poista esto** → *OK*. Sama voi koskea koko purettua kansiota: tee tämä alkuperäiselle
+zip-tiedostolle ennen purkamista, niin merkintä ei periydy tiedostoihin.
+
+**Defender ilmoittaa uhasta tai poistaa tiedoston.** Pakattu Python-sovellus laukaisee joskus
+väärän hälytyksen (tyypillisesti `Trojan:Win32/Wacatac` tai `Program:Win32/...`). Palauta se:
+**Windowsin suojaus** (Käynnistä → kirjoita *Windowsin suojaus*) → **Virusten ja uhkien
+torjunta** → **Suojaushistoria** → avaa ilmoitus → *Toiminnot* → **Palauta** tai **Salli
+laitteessa**. Jotta sama ei toistu päivityksissä, lisää asennuskansio poikkeuksiin: *Virusten ja
+uhkien torjunta* → *Virusten ja uhkien torjunnan asetukset* → **Hallitse asetuksia** → rullaa
+kohtaan **Poikkeukset** → *Lisää tai poista poikkeuksia* → **Lisää poikkeus → Kansio** → valitse
+`C:\Ohjelmat\OpintosuunnitelmanTayttaja`. Poikkeuksen lisääminen vaatii järjestelmänvalvojan
+oikeudet.
+
+**SmartScreenin asetukset**, jos varoitukset halutaan pois kokonaan: *Windowsin suojaus* →
+**Sovellusten ja selaimen hallinta** → *Maineeseen perustuva suojaus* → **Maineeseen perustuvan
+suojauksen asetukset**. Kohta *Tarkista sovellukset ja tiedostot* on se, joka näyttää sinisen
+varoitusikkunan. Suosittelemme jättämään sen päälle ja käyttämään yllä olevaa *Suorita silti*
+-reittiä; kytkimen sammuttaminen poistaa suojan kaikilta ladatuilta ohjelmilta.
+
+**Työpaikan hallinnoitu kone (Intune).** Jos *Suorita silti* -nappia ei ole lainkaan tai
+Defenderin asetukset ovat harmaina, organisaation käytäntö estää tuntemattomat ohjelmat.
+Tällöin pyydä IT:tä sallimaan `OpintosuunnitelmanTayttaja.exe` tai jakamaan paketti keskitetysti;
+itse et voi ohittaa estoa.
+
+## Kehittäjille
+
+### macOS
 
 **Kehitysversio lähdekoodista** (Homebrew ja uv):
 
@@ -52,6 +122,10 @@ uv sync --extra gui
 uv run suunnitelmoittaja-gui           # käyttöliittymä
 scripts/make-launcher.sh --dock        # Dock-käynnistin "Opintosuunnitelman muokkaaja"
 ```
+
+Myös kehitysversio käyttää käyttäjän asetuskansiota, joten opettajan yhteystiedot eivät päädy
+repon `config.json`-tiedostoon; komentorivi (`uv run suunnitelmoittaja`) lukee edelleen repon
+`config.json`-tiedostoa, tai annetun `-c`-tiedoston.
 
 **Oma paketti** (.app + .dmg kansioon `dist/`):
 
@@ -72,18 +146,6 @@ Paketoidusta sovelluksesta komentorivi on
 `"/Applications/Opintosuunnitelman muokkaaja.app/Contents/MacOS/OpintosuunnitelmanTayttaja" --cli fill 1`.
 
 ### Windows
-
-**Valmis sovellus**
-
-1. Lataa `OpintosuunnitelmanTayttaja-<versio>-windows-x64.zip` ja pura se esimerkiksi kansioon
-   `C:\Ohjelmat\OpintosuunnitelmanTayttaja\`.
-2. Käynnistä `OpintosuunnitelmanTayttaja.exe`. SmartScreen varoittaa tuntemattomasta julkaisijasta:
-   *Lisätietoja* → *Suorita silti*.
-3. Pikakuvake työpöydälle tai tehtäväpalkkiin: hiiren oikea → *Lähetä kohteeseen* → *Työpöytä*,
-   tai vedä käynnissä olevan sovelluksen kuvake tehtäväpalkkiin ja valitse *Kiinnitä*.
-
-Asetukset ja Excel-pohja kopioidaan ensimmäisellä käynnistyksellä kansioon
-`%APPDATA%\OpintosuunnitelmanTayttaja\` (Tiedosto → *Avaa asetuskansio*).
 
 **Kehitysversio lähdekoodista** (PowerShell; uv asennetaan wingetillä):
 
@@ -330,7 +392,7 @@ Tarkista napin `id` selaimen kehittäjätyökaluilla.
 ```bash
 uv sync --extra gui                      # asentaa myös dev-riippuvuudet ja PySide6
 uv run playwright install chromium       # testien selain (kerran)
-uv run pytest                            # 51 testiä: selaintestit + GUI offscreen
+uv run pytest                            # 96 testiä: selaintestit + GUI offscreen
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
 ```

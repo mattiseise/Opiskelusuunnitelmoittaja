@@ -75,14 +75,20 @@ jobs:
           body: |
             ## Asennus
 
+            Ladattavat tiedostot ovat alla kohdassa **Assets**: Mac (Apple Silicon) →
+            `...-macos-arm64.dmg`, Windows → `...-windows-x64.zip`. `.sha256`- ja
+            *Source code* -tiedostoja ei tarvita.
+
             **macOS (Apple Silicon):** avaa `.dmg`, vedä sovellus Ohjelmat-kansioon.
             Paketti on allekirjoitettu ad hoc (ei Apple-notarisointia), joten ensimmäisellä
             avauksella macOS voi estää sen. Avaa silloin Järjestelmäasetukset → Tietosuoja ja
             suojaus → *Avaa silti*, tai aja Terminaalissa:
             `xattr -dr com.apple.quarantine /Applications/Opintosuunnitelman\ muokkaaja.app`
 
-            **Windows:** pura `.zip` ja käynnistä `OpintosuunnitelmanTayttaja.exe`.
-            SmartScreen voi varoittaa tuntemattomasta julkaisijasta → *Lisätietoja* → *Suorita silti*.
+            **Windows:** pura `.zip` pysyvään kansioon ja käynnistä `OpintosuunnitelmanTayttaja.exe`.
+            SmartScreen varoittaa tuntemattomasta julkaisijasta → *Lisätietoja* → *Suorita silti*.
+            Selaimen latausvaroitus, Defenderin väärä hälytys ja muut Windows 11 -tilanteet:
+            [README → SmartScreen ja Defender](https://github.com/mattiseise/Opiskelusuunnitelmoittaja#smartscreen-ja-defender-windows-11ssä).
 
             Sovellus tarvitsee Google Chromen. Asetukset ja Excel kopioidaan ensimmäisellä
             käynnistyksellä käyttäjän omaan kansioon (Tiedosto → Avaa asetuskansio).
