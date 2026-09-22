@@ -383,7 +383,7 @@ class FormFiller:
         if date_ctrl.count() == 0:
             raise RuntimeError("päivämääräkenttää ei löydy päivitystaulukon riviltä")
         if date_ctrl.input_value().strip() == "":
-            date_ctrl.fill(date_text)
+            self._type_date(date_ctrl, date_text)
         else:
             date_text = date_ctrl.input_value().strip()  # Wilma täytti oletuksen itse
 
@@ -407,6 +407,31 @@ class FormFiller:
         if not who:
             log.warning("Päivittäjän nimeä ei saatu; täytä se Wilmassa käsin.")
         return summary
+
+    def _type_date(self, control: Locator, text: str) -> None:
+        """Kirjoita päivämäärä näppäimistöllä ja sulje kalenteri.
+
+        Wilman päivämääräkentässä on jQuery-datepicker, joka avautuu fokuksesta ja lukee
+        arvon vain näppäinpainalluksista. Playwrightin ``fill`` asettaa arvon suoraan, jolloin
+        kalenteri jää auki eikä pidä päivää valittuna, ja tallennus hukkaa sen. Siksi teksti
+        kirjoitetaan merkki kerrallaan, minkä jälkeen Tab sulkee kalenterin ja siirtää fokuksen.
+        """
+
+        def do_type() -> None:
+            control.click()
+            control.fill("")
+            control.type(text, delay=15)
+            control.dispatch_event("change")
+            control.press("Tab")
+            actual = control.input_value().strip()
+            if actual != text:
+                raise RuntimeError(
+                    f"päivämäärä ei tarttunut (odotettu {text!r}, saatiin {actual!r})"
+                )
+
+        self._retry(do_type, what="päivämäärän kirjoitus")
+        # varmuuden vuoksi: jos kalenteri jäi näkyviin, Escape sulkee sen
+        self.page.keyboard.press("Escape")
 
     # --- sisäiset apurit ----------------------------------------------------
 

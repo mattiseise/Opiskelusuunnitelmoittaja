@@ -179,8 +179,8 @@ Versiotagi käynnistää GitHub Actions -putken, joka ajaa testit, rakentaa macO
 Windows-paketit ja liittää ne Releaseen asennusohjeineen:
 
 ```bash
-git tag v2.5.1
-git push origin v2.5.1
+git tag v2.5.2
+git push origin v2.5.2
 ```
 
 ## Käyttö ikkunassa
@@ -419,7 +419,7 @@ Paketointi käyttää PyInstalleria (`packaging/OpintosuunnitelmanTayttaja.spec`
 Node-ajuri pakataan mukaan, selainta ei: sovellus kytkeytyy käyttäjän omaan Chromeen.
 Paketoitua sovellusta voi ajaa myös komentoriviltä: `OpintosuunnitelmanTayttaja --cli fill 1`.
 
-Julkaisu: `git tag v2.5.1 && git push --tags` käynnistää GitHub Actions -putken
+Julkaisu: `git tag v2.5.2 && git push --tags` käynnistää GitHub Actions -putken
 (`.github/workflows/release.yml`), joka ajaa testit, rakentaa macOS- ja Windows-paketit ja
 liittää ne GitHub Releaseen.
 
