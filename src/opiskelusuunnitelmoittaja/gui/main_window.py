@@ -427,26 +427,22 @@ class MainWindow(QMainWindow):
 
         # 4 · Esikatselu ja muokkaus
         step4 = self._step_header("4", "Esikatselu ja muokkaus")
+        # + Uusi rivi ja Aseta ajankohta ovat nappeina taulukon alla (lisätään layoutiin
+        # esikatselun jälkeen); tässä vain luodaan ne.
         self.btn_add_row = QPushButton("+ Uusi rivi")
-        self.btn_add_row.setProperty("variant", "link")
         self.btn_add_row.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add_row.setToolTip(
             "Lisää esikatseluun tyhjä rivi (lähde 'Oma rivi') valitun rivin alle, tai loppuun. "
             "Kirjoita solut kaksoisnapsauttamalla."
         )
         self.btn_add_row.clicked.connect(self.add_manual_row)
-        step4.addWidget(self.btn_add_row)
-        step4.addWidget(_label("·", "muted"))
         self.btn_set_time = QPushButton("Aseta ajankohta valituille")
-        self.btn_set_time.setProperty("variant", "link")
         self.btn_set_time.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_set_time.setToolTip(
             "Kirjoittaa saman suoritusajankohdan kaikille rastitetuille riveille. "
             "Solua voi muokata myös kaksoisnapsauttamalla."
         )
         self.btn_set_time.clicked.connect(self.set_time_for_checked)
-        step4.addWidget(self.btn_set_time)
-        step4.addWidget(_label("·", "muted"))
         self.btn_up = QPushButton("▲")
         self.btn_up.setProperty("variant", "link")
         self.btn_up.setToolTip("Siirrä valittu rivi ylös")
@@ -524,6 +520,13 @@ class MainWindow(QMainWindow):
         self.preview.verticalHeader().setDefaultSectionSize(34)
         self.preview.setWordWrap(False)
         right_layout.addWidget(self.preview, 6)
+        table_actions = QHBoxLayout()
+        table_actions.setSpacing(12)
+        table_actions.setContentsMargins(0, 10, 0, 0)
+        table_actions.addWidget(self.btn_add_row)
+        table_actions.addWidget(self.btn_set_time)
+        table_actions.addStretch()
+        right_layout.addLayout(table_actions)
 
         right_layout.addWidget(_hairline(top=14, bottom=14))
 

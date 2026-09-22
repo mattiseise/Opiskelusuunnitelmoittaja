@@ -93,7 +93,9 @@ def connect(cfg: BrowserConfig) -> Iterator[Browser]:
         pw.stop()
 
 
-STUDENT_LINK = ".breadcrumb a[href*='/profiles/students/']"
+# Vain leivänmurun oma linkki (li > a). Opiskelijakohdassa on myös pudotusvalikko, jossa
+# on koko ryhmän opiskelijat linkkeinä (ul.dropdown-menu li a) – ne eivät saa osua.
+STUDENT_LINK = ".breadcrumb > li > a[href*='/profiles/students/']"
 
 
 def student_name(page: Page) -> str:
@@ -105,10 +107,9 @@ def student_name(page: Page) -> str:
     """
     try:
         links = page.locator(STUDENT_LINK)
-        n = links.count()
-        if n == 0:
+        if links.count() == 0:
             return ""
-        text = links.nth(n - 1).inner_text(timeout=2000)
+        text = links.first.inner_text(timeout=2000)
         return " ".join(text.replace("\xa0", " ").split())
     except Exception as exc:  # sivu vaihtui kesken tai ei ole Wilma
         log.debug("Opiskelijan nimeä ei saatu: %s", exc)

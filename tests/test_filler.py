@@ -466,8 +466,10 @@ def test_student_name_from_breadcrumb(page: Page, wilma_url: str, lomake_url: st
     from opiskelusuunnitelmoittaja.browser import describe_page, student_name
 
     page.goto(wilma_url)
+    # leivänmurun oma linkki, ei pudotusvalikon viimeinen opiskelija ("Viimeinen Valikossa")
     assert student_name(page) == "Testi Oppilas"
     assert describe_page(page) == "Testi Oppilas"
+    assert page.locator(".breadcrumb a[href*='/profiles/students/']").count() == 4
     page.goto(lomake_url)
     assert student_name(page) == ""
     assert describe_page(page).startswith("Testilomake")  # otsikko, kun nimeä ei ole

@@ -179,8 +179,8 @@ Versiotagi käynnistää GitHub Actions -putken, joka ajaa testit, rakentaa macO
 Windows-paketit ja liittää ne Releaseen asennusohjeineen:
 
 ```bash
-git tag v2.5.0
-git push origin v2.5.0
+git tag v2.5.1
+git push origin v2.5.1
 ```
 
 ## Käyttö ikkunassa
@@ -202,10 +202,10 @@ Ikkuna kulkee viidessä vaiheessa:
    riittää pääsuuntaus Excelistä; vanhalle haetaan Wilman rivit, lisätään Excelistä puuttuvat
    ja täytetään korvaustilassa.
 4. **Esikatselu ja muokkaus.** Taulukko näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
-   *+ Uusi rivi* lisää tyhjän rivin (lähde *Oma rivi*) valitun rivin alle tai loppuun; kirjoita
-   solut kaksoisnapsauttamalla. Jokaisen solun voi muokata, rivin rastin voi poistaa, otsikkorivin rasti
-   valitsee tai poistaa kaikki, *Aseta ajankohta valituille* kirjoittaa saman ajankohdan
-   rastitetuille. Rivin järjestystä vaihdetaan raahaamalla rivin alussa olevasta
+   Taulukon alla ovat napit **+ Uusi rivi**, joka lisää tyhjän rivin (lähde *Oma rivi*) valitun
+   rivin alle tai loppuun, ja **Aseta ajankohta valituille**, joka kirjoittaa saman ajankohdan
+   rastitetuille. Solut kirjoitetaan kaksoisnapsauttamalla. Jokaisen solun voi muokata, rivin
+   rastin voi poistaa, otsikkorivin rasti valitsee tai poistaa kaikki. Rivin järjestystä vaihdetaan raahaamalla rivin alussa olevasta
    tarttumasta ⋮⋮ (tai ▲▼-linkeillä), ja rivin oikean laidan roskakori poistaa rivin
    esikatselusta (*Palauta poistetut* tuo ne takaisin). Tyhjät välirivit lähteiden välissä
    näkyvät omina riveinään lähteenä *Välirivi*, samoin Wilman lomakkeen tyhjät rivit, joten
@@ -419,7 +419,7 @@ Paketointi käyttää PyInstalleria (`packaging/OpintosuunnitelmanTayttaja.spec`
 Node-ajuri pakataan mukaan, selainta ei: sovellus kytkeytyy käyttäjän omaan Chromeen.
 Paketoitua sovellusta voi ajaa myös komentoriviltä: `OpintosuunnitelmanTayttaja --cli fill 1`.
 
-Julkaisu: `git tag v2.5.0 && git push --tags` käynnistää GitHub Actions -putken
+Julkaisu: `git tag v2.5.1 && git push --tags` käynnistää GitHub Actions -putken
 (`.github/workflows/release.yml`), joka ajaa testit, rakentaa macOS- ja Windows-paketit ja
 liittää ne GitHub Releaseen.
 
