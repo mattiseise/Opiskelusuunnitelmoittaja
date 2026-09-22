@@ -76,6 +76,10 @@ class Selectors:
     # Poistonappi rivin sisällä (Wilma: vain samalla sivulatauksella lisätyillä riveillä).
     # Rivit, joilta nappi puuttuu, tyhjennetään korvaustilassa.
     remove_row_button: str = "td:last-child button, td:last-child a, [id$='__remove']"
+    # Pvm & päivittäjä -taulukko: päivitysmerkintä lisätään sen viimeiseksi riviksi
+    update_table_body: str = 'table:has(th:has-text("Päivitetty")) tbody'
+    update_date_cell: str = "td:nth-child(1)"
+    update_name_cell: str = "td:nth-child(2)"
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +105,7 @@ class Config:
     teacher: TeacherContact = field(default_factory=TeacherContact)
     fill_mode: FillMode = FillMode.APPEND  # oletustäyttötapa (GUI:ssa ja CLI:ssä ilman lippua)
     key_field: str = "osaamistavoite"  # kenttä, jolla täydennystila tunnistaa jo olevan rivin
+    add_update_row: bool = True  # lisää täytön lopuksi Pvm & päivittäjä -merkintä
 
     @property
     def field_names(self) -> list[str]:
@@ -164,6 +169,9 @@ def config_from_dict(raw: dict[str, Any], *, base_dir: Path | None = None) -> Co
             field_cells=dict(selectors.get("field_cells", ds.field_cells)),
             input_in_cell=selectors.get("input_in_cell", ds.input_in_cell),
             remove_row_button=str(selectors.get("remove_row_button", ds.remove_row_button)),
+            update_table_body=str(selectors.get("update_table_body", ds.update_table_body)),
+            update_date_cell=str(selectors.get("update_date_cell", ds.update_date_cell)),
+            update_name_cell=str(selectors.get("update_name_cell", ds.update_name_cell)),
         ),
         excel_columns=dict(raw.get("excel_columns", d.excel_columns)),
         empty_value=str(raw.get("empty_value", d.empty_value)),
@@ -180,6 +188,7 @@ def config_from_dict(raw: dict[str, Any], *, base_dir: Path | None = None) -> Co
         else TeacherContact(),
         fill_mode=FillMode.parse(fill.get("mode"), default=d.fill_mode),
         key_field=str(fill.get("key_field") or d.key_field),
+        add_update_row=bool(fill.get("update_row", d.add_update_row)),
     )
 
 
@@ -209,11 +218,18 @@ def config_to_dict(config: Config, *, base_dir: Path | None = None) -> dict[str,
             "field_cells": dict(config.selectors.field_cells),
             "input_in_cell": config.selectors.input_in_cell,
             "remove_row_button": config.selectors.remove_row_button,
+            "update_table_body": config.selectors.update_table_body,
+            "update_date_cell": config.selectors.update_date_cell,
+            "update_name_cell": config.selectors.update_name_cell,
         },
         "excel_columns": dict(config.excel_columns),
         "empty_value": config.empty_value,
         "separator_row_between_sheets": config.separator_row_between_sheets,
-        "fill": {"mode": config.fill_mode.value, "key_field": config.key_field},
+        "fill": {
+            "mode": config.fill_mode.value,
+            "key_field": config.key_field,
+            "update_row": config.add_update_row,
+        },
         "retry": {"max_attempts": config.max_attempts, "delay_s": config.retry_delay_s},
         "logging": {"level": config.log_level},
     }

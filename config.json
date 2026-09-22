@@ -20,7 +20,10 @@
       "suoritusajankohta": "td:nth-child(4)"
     },
     "input_in_cell": "input, textarea, select",
-    "remove_row_button": "td:last-child button, td:last-child a, [id$='__remove']"
+    "remove_row_button": "td:last-child button, td:last-child a, [id$='__remove']",
+    "update_table_body": "table:has(th:has-text(\"Päivitetty\")) tbody",
+    "update_date_cell": "td:nth-child(1)",
+    "update_name_cell": "td:nth-child(2)"
   },
   "excel_columns": {
     "osaamistavoite": "Osaamistavoite",
@@ -72,6 +75,7 @@
   },
   "fill": {
     "mode": "append",
-    "key_field": "osaamistavoite"
+    "key_field": "osaamistavoite",
+    "update_row": true
   }
 }

@@ -179,8 +179,8 @@ Versiotagi käynnistää GitHub Actions -putken, joka ajaa testit, rakentaa macO
 Windows-paketit ja liittää ne Releaseen asennusohjeineen:
 
 ```bash
-git tag v2.4.0
-git push origin v2.4.0
+git tag v2.5.0
+git push origin v2.5.0
 ```
 
 ## Käyttö ikkunassa
@@ -202,7 +202,8 @@ Ikkuna kulkee viidessä vaiheessa:
    riittää pääsuuntaus Excelistä; vanhalle haetaan Wilman rivit, lisätään Excelistä puuttuvat
    ja täytetään korvaustilassa.
 4. **Esikatselu ja muokkaus.** Taulukko näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
-   Jokaisen solun voi muokata kaksoisnapsauttamalla, rivin rastin voi poistaa, otsikkorivin rasti
+   *+ Uusi rivi* lisää tyhjän rivin (lähde *Oma rivi*) valitun rivin alle tai loppuun; kirjoita
+   solut kaksoisnapsauttamalla. Jokaisen solun voi muokata, rivin rastin voi poistaa, otsikkorivin rasti
    valitsee tai poistaa kaikki, *Aseta ajankohta valituille* kirjoittaa saman ajankohdan
    rastitetuille. Rivin järjestystä vaihdetaan raahaamalla rivin alussa olevasta
    tarttumasta ⋮⋮ (tai ▲▼-linkeillä), ja rivin oikean laidan roskakori poistaa rivin
@@ -222,6 +223,16 @@ Ikkuna kulkee viidessä vaiheessa:
    ![Täyttö käynnissä](docs/kuvat/03-taytto.png)
 
 6. Tarkista rivit Wilmassa ja paina *Tallenna tiedot* (sovellus ei tallenna puolestasi).
+
+Ennen täyttöä sovellus lukee Chromen lomakesivulta **opiskelijan nimen** ja näyttää sen
+vahvistusikkunassa. Jos Wilman rivit haettiin eri opiskelijalta kuin se, jonka lomake on nyt
+auki, ikkuna varoittaa. Näin väärän opiskelijan lomake ei täyty vahingossa, vaikka Chromessa
+olisi useita opintokortteja auki.
+
+Kohdan 3 rasti **Lisää päivitysmerkintä (Pvm & päivittäjä)** (oletus päällä, `fill.update_row`)
+lisää täytön lopuksi lomakkeen toiseen taulukkoon rivin, jossa on tämän päivän päivämäärä ja
+päivittäjänä Wilman oletus eli kirjautunut opettaja. Taulukon viimeinen rivi käytetään, jos se on
+tyhjä. Tarkista rivi ennen tallennusta; jos nimi jää tyhjäksi, valitse se Wilman listasta käsin.
 
 Kohdan 3 *Avaa Excel* avaa lähdetaulukon Excelissä (tai .xlsx-tiedostojen oletusohjelmassa).
 Tallenna muutokset Excelissä ja paina *Lataa uudelleen*, niin esikatselu päivittyy.
@@ -285,7 +296,7 @@ valmiina tyhjä rivi (Wilmassa on), ensimmäinen Excel-rivi täytetään siihen;
 lisäysnapilla. Sivun muihin taulukoihin (esim. Pvm & päivittäjä) ei kosketa. Välilehtien väliin
 lisätään tyhjä välirivi (`--no-separator` poistaa sen). Täyttötapa: `--lisaa` (oletus),
 `--korvaa` tai `--taydenna` (ks. [Täyttötapa](#täyttötapa)). Lopuksi tulostuu yhteenveto; virheet
-kirjataan lokiin `logs/app.log`. `-v` näyttää etenemislokin konsolissa, `--debug` yksityiskohdat,
+kirjataan lokiin `logs/app.log` (kiertää 2 MB:n kohdalla, kolme varmuuskopiota). `-v` näyttää etenemislokin konsolissa, `--debug` yksityiskohdat,
 `uv run suunnitelmoittaja sheets` listaa Excelin välilehdet numeroituina.
 
 ### Ohjattu kysely
@@ -408,7 +419,7 @@ Paketointi käyttää PyInstalleria (`packaging/OpintosuunnitelmanTayttaja.spec`
 Node-ajuri pakataan mukaan, selainta ei: sovellus kytkeytyy käyttäjän omaan Chromeen.
 Paketoitua sovellusta voi ajaa myös komentoriviltä: `OpintosuunnitelmanTayttaja --cli fill 1`.
 
-Julkaisu: `git tag v2.4.0 && git push --tags` käynnistää GitHub Actions -putken
+Julkaisu: `git tag v2.5.0 && git push --tags` käynnistää GitHub Actions -putken
 (`.github/workflows/release.yml`), joka ajaa testit, rakentaa macOS- ja Windows-paketit ja
 liittää ne GitHub Releaseen.
 

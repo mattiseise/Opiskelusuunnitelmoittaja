@@ -8,6 +8,7 @@
   Arvot ovat keksittyjä. Uuden rivin malli vastaa Wilman __model-kenttää: viides solu,
   jossa poistonappi ...__remove.
 -->
+<ol class="breadcrumb"><li><a href="/">Oma&#160;etusivu</a></li><li><a href="/profiles/students">Opiskelijat</a></li><li><a href="/profiles/schools/1">Testikoulu</a></li><li class="dropdown"><a href="/profiles/classes/1">TESTI26A</a></li><li class="dropdown"><a href="/profiles/students/1">Testi&#160;Oppilas</a></li><li class="active">Opintosuunnitelma</li></ol>
 <main id="main-content">
 <form class="form-common dock" action="/forms/42/1" method="post">
 <input type="hidden" name="formkey" value="teacher:1:test">
@@ -83,8 +84,40 @@
       tbody.appendChild(tr);
     }, 30);
   }
+  // Pvm & päivittäjä: uusi rivi tyhjillä kentillä + Wilman piilotetut oletusarvot (__default)
+  let metaN = 1;
+  function addMetaRow() {
+    metaN += 1;
+    const n = metaN;
+    setTimeout(() => {
+      const tr = document.createElement('tr');
+      const td1 = document.createElement('td');
+      const dateInput = document.createElement('input');
+      dateInput.className = 'form-control date'; dateInput.type = 'text';
+      dateInput.name = `prepeater2153-${n}-pfield2153`; dateInput.id = `f-prepeater2153-${n}-pfield2153`;
+      const dateDefault = document.createElement('input');
+      dateDefault.type = 'hidden'; dateDefault.id = `f-prepeater2153-${n}-pfield2153__default`; dateDefault.value = '1.1.2030';
+      td1.appendChild(dateInput); td1.appendChild(dateDefault);
+      const td2 = document.createElement('td');
+      const nameInput = document.createElement('input');
+      nameInput.className = 'autocomplete form-control'; nameInput.type = 'text';
+      nameInput.name = `prepeater2153-${n}-pfield2154`; nameInput.id = `f-prepeater2153-${n}-pfield2154`;
+      const nameId = document.createElement('input');
+      nameId.type = 'hidden'; nameId.name = `prepeater2153-${n}-pfield2154__id`; nameId.value = '0';
+      const nameDefault = document.createElement('input');
+      nameDefault.type = 'hidden'; nameDefault.id = `f-prepeater2153-${n}-pfield2154__default`; nameDefault.value = '992:Opettaja Testi';
+      td2.appendChild(nameInput); td2.appendChild(nameId); td2.appendChild(nameDefault);
+      const td3 = document.createElement('td');
+      const del = document.createElement('button');
+      del.type = 'submit'; del.id = `f-prepeater2153-${n}__remove`; del.textContent = '−';
+      td3.appendChild(del);
+      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+      document.getElementById('meta-rows').appendChild(tr);
+    }, 30);
+  }
   document.querySelector('form').addEventListener('submit', (ev) => ev.preventDefault());
   document.getElementById('f-prepeater9700__add').addEventListener('click', (ev) => { ev.preventDefault(); addRow(); });
+  document.getElementById('f-prepeater2153__add').addEventListener('click', (ev) => { ev.preventDefault(); addMetaRow(); });
   document.getElementById('rows').addEventListener('click', (ev) => {
     const btn = ev.target.closest('button[id$="__remove"]');
     if (btn) {

@@ -38,7 +38,14 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_TITLE, __version__
-from ..browser import BrowserError, is_chrome_listening, launch_chrome
+from ..browser import (
+    BrowserError,
+    connect,
+    find_form_page,
+    is_chrome_listening,
+    launch_chrome,
+    student_name,
+)
 from ..config import Config, ConfigError, load_config
 from ..contact import QUESTION as CONTACT_QUESTION
 from ..excel import ExcelError, PlanRow, Sheet, list_sheets, read_sheet
@@ -56,6 +63,7 @@ log = logging.getLogger("suunnitelmoittaja.gui")
 TIME_FIELD = "suoritusajankohta"
 WILMA_SHEET = "Wilma"
 SEPARATOR_SHEET = "Välirivi"  # esikatselussa näkyvä tyhjä rivi lähteiden väliin
+MANUAL_SHEET = "Oma rivi"  # "+ Uusi rivi" -napilla käsin lisätty rivi
 GRIP_COL = 0  # tarttuma raahaukseen
 CHECK_COL = 1
 SOURCE_COL = 2
@@ -98,6 +106,11 @@ class MainWindow(QMainWindow):
         self._order: list[tuple[str, int]] = []  # käyttäjän järjestys, jos riviä siirretty
         self._deleted: set[tuple[str, int]] = set()  # roskakorilla poistetut rivit
         self._wilma_rows: list[PlanRow] = []
+        self._wilma_student = ""  # opiskelija, jolta Wilman rivit haettiin
+        self._manual_rows: list[dict[str, str]] = []  # "+ Uusi rivi" -rivien lähtöarvot
+        self._preview_names: list[
+            str
+        ] = []  # esikatselun lähteet otsikkoon (Wilma, Excel, Oma rivi…)
         self.reader: ReadWorker | None = None
         self.rb_no_main: QRadioButton | None = None  # "Ei pääsuuntausta Excelistä"
         self.update_check: UpdateCheck | None = None
@@ -397,6 +410,13 @@ class MainWindow(QMainWindow):
         self.separator_check = QCheckBox("Tyhjä välirivi lähteiden väliin")
         self.separator_check.toggled.connect(lambda _c: self.update_preview())
         left_layout.addWidget(self.separator_check)
+        self.update_row_check = QCheckBox("Lisää päivitysmerkintä (Pvm & päivittäjä)")
+        self.update_row_check.setToolTip(
+            "Täytön lopuksi Pvm & päivittäjä -taulukkoon lisätään rivi: tämän päivän "
+            "päivämäärä ja kirjautunut opettaja Wilman oletuksesta. Tarkista rivi ennen "
+            "tallennusta."
+        )
+        left_layout.addWidget(self.update_row_check)
         self.contact_check = QCheckBox(CONTACT_QUESTION.rstrip("?"))
         self.contact_check.toggled.connect(lambda _c: self.update_preview())
         left_layout.addWidget(self.contact_check)
@@ -407,6 +427,16 @@ class MainWindow(QMainWindow):
 
         # 4 · Esikatselu ja muokkaus
         step4 = self._step_header("4", "Esikatselu ja muokkaus")
+        self.btn_add_row = QPushButton("+ Uusi rivi")
+        self.btn_add_row.setProperty("variant", "link")
+        self.btn_add_row.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_add_row.setToolTip(
+            "Lisää esikatseluun tyhjä rivi (lähde 'Oma rivi') valitun rivin alle, tai loppuun. "
+            "Kirjoita solut kaksoisnapsauttamalla."
+        )
+        self.btn_add_row.clicked.connect(self.add_manual_row)
+        step4.addWidget(self.btn_add_row)
+        step4.addWidget(_label("·", "muted"))
         self.btn_set_time = QPushButton("Aseta ajankohta valituille")
         self.btn_set_time.setProperty("variant", "link")
         self.btn_set_time.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -604,6 +634,7 @@ class MainWindow(QMainWindow):
         self.excel_edit.setText(_short_path(self.excel_path))
         self.excel_edit.setToolTip(str(self.excel_path))
         self.separator_check.setChecked(self.config.separator_row_between_sheets)
+        self.update_row_check.setChecked(self.config.add_update_row)
         saved_mode = str(self.settings.value("fill_mode", "", type=str) or "")
         self.set_fill_mode(FillMode.parse(saved_mode, default=self.config.fill_mode))
         teacher = self.config.teacher
@@ -744,6 +775,10 @@ class MainWindow(QMainWindow):
                 continue
             for i, r in enumerate(sheet.rows):
                 rows.append(PreviewRow(sheet.name, (sheet.name, i), dict(r.values)))
+        for i, values in enumerate(self._manual_rows):
+            rows.append(PreviewRow(MANUAL_SHEET, (MANUAL_SHEET, i), dict(values)))
+        if self._manual_rows:
+            names = [*names, MANUAL_SHEET]
         if self.contact_check.isChecked():
             contact_sheet = self.config.teacher.sheet(self.config.field_names)
             if contact_sheet is not None:
@@ -777,6 +812,7 @@ class MainWindow(QMainWindow):
                     pos[row.key] = prev
             rows.sort(key=lambda r: pos[r.key])
         self._preview_rows = rows
+        self._preview_names = names
         self._render_preview()
         self._refresh_preview_summary(names)
         self._refresh_restore_link()
@@ -786,7 +822,12 @@ class MainWindow(QMainWindow):
         out: list[PreviewRow] = []
         n = 0
         for row in rows:
-            if out and out[-1].sheet != row.sheet:
+            # Oma rivi liittyy naapuriinsa: sen ympärille ei tule väliriviä
+            if (
+                out
+                and out[-1].sheet != row.sheet
+                and MANUAL_SHEET not in (out[-1].sheet, row.sheet)
+            ):
                 out.append(
                     PreviewRow(
                         SEPARATOR_SHEET,
@@ -864,7 +905,7 @@ class MainWindow(QMainWindow):
         self._render_preview()
         if self.preview.rowCount():
             self.preview.selectRow(min(r, self.preview.rowCount() - 1))
-        self._refresh_preview_summary(self.selected_sheet_names())
+        self._refresh_preview_summary()
         self._refresh_restore_link()
         self.statusBar().showMessage(
             f"Rivi poistettu esikatselusta: {row.values.get(self.config.field_names[0], '')}", 4000
@@ -873,6 +914,30 @@ class MainWindow(QMainWindow):
     def restore_deleted_rows(self) -> None:
         self._deleted.clear()
         self.update_preview()
+
+    def add_manual_row(self) -> int:
+        """Lisää tyhjä "Oma rivi" esikatseluun valitun rivin alle (tai loppuun) ja avaa
+        osaamistavoitesolun muokattavaksi. Palauttaa rivin indeksin esikatselussa."""
+        key = (MANUAL_SHEET, len(self._manual_rows))
+        self._manual_rows.append(dict.fromkeys(self.config.field_names, ""))
+        sel = self.preview.selectionModel()
+        current = self.preview.currentRow() if sel is not None and sel.hasSelection() else -1
+        self.update_preview()
+        idx = next(i for i, r in enumerate(self._preview_rows) if r.key == key)
+        # valitun rivin alle, muuten loppuun (myös silloin, kun rivejä on jo järjestelty)
+        dst = current + 1 if current >= 0 else len(self._preview_rows) - 1
+        if dst != idx:
+            self.move_row(idx, dst)
+            idx = dst
+        self.preview.selectRow(idx)
+        first = self.preview.item(idx, FIELD_COLUMN_OFFSET)
+        if first is not None:
+            self.preview.setCurrentItem(first)
+            self.preview.editItem(first)
+        self.statusBar().showMessage(
+            "Uusi rivi lisätty. Kirjoita solut kaksoisnapsauttamalla.", 5000
+        )
+        return idx
 
     def checked_row_indices(self) -> list[int]:
         return [
@@ -949,7 +1014,7 @@ class MainWindow(QMainWindow):
         self._order = [r.key for r in rows]
         self._render_preview()
         self.preview.selectRow(dst)
-        self._refresh_preview_summary(self.selected_sheet_names())
+        self._refresh_preview_summary()
 
     def read_from_wilma(self) -> None:
         """Lue avoimen lomakkeen rivit esikatseluun (Wilma-lähde)."""
@@ -969,8 +1034,9 @@ class MainWindow(QMainWindow):
         self.reader.start()
 
     @Slot(object)
-    def _on_wilma_rows(self, rows: list[PlanRow]) -> None:
+    def _on_wilma_rows(self, rows: list[PlanRow], student: str = "") -> None:
         self._wilma_rows = list(rows)
+        self._wilma_student = student
         # vanhat Wilma-muokkaukset eivät enää vastaa uutta lukua
         for key in [k for k in self._edits if k[0] == WILMA_SHEET]:
             del self._edits[key]
@@ -993,8 +1059,9 @@ class MainWindow(QMainWindow):
     def _refresh_wilma_status(self) -> None:
         n = len(self._wilma_rows)
         if n:
+            who = f" opiskelijalta {self._wilma_student}" if self._wilma_student else ""
             self.wilma_status.setText(
-                f"{n} riviä haettu. Ne näkyvät esikatselussa lähteenä Wilma; muokkaa ja "
+                f"{n} riviä haettu{who}. Ne näkyvät esikatselussa lähteenä Wilma; muokkaa ja "
                 "järjestä ne kohdassa 4. Valitse pääsuuntaus, jos haluat lisätä Excelin rivit."
             )
         else:
@@ -1016,6 +1083,7 @@ class MainWindow(QMainWindow):
 
     def clear_wilma_rows(self) -> None:
         self._wilma_rows = []
+        self._wilma_student = ""
         self._order = []
         if self.rb_no_main is not None and self.rb_no_main.isChecked():
             # ilman Wilman rivejä palataan ensimmäiseen pääsuuntaukseen
@@ -1039,7 +1107,7 @@ class MainWindow(QMainWindow):
             else:
                 self._unchecked.add(row.key)
         self.preview.blockSignals(False)
-        self._refresh_preview_summary(self.selected_sheet_names())
+        self._refresh_preview_summary()
 
     def _on_preview_item_changed(self, item: QTableWidgetItem) -> None:
         r = item.row()
@@ -1052,13 +1120,14 @@ class MainWindow(QMainWindow):
                 self._unchecked.discard(row.key)
             else:
                 self._unchecked.add(row.key)
-            self._refresh_preview_summary(self.selected_sheet_names())
+            self._refresh_preview_summary()
             return
         field = self._field_for_column(item.column())
         if field is not None:
             self._record_edit(r, field, item.text().strip())
 
-    def _refresh_preview_summary(self, names: list[str]) -> None:
+    def _refresh_preview_summary(self, names: list[str] | None = None) -> None:
+        names = self._preview_names if names is None else names
         total = self.preview.rowCount()
         checked = len(self.checked_row_indices())
         count = f"{checked} / {total} RIVIÄ" if checked != total else f"{total} RIVIÄ"
@@ -1189,10 +1258,30 @@ class MainWindow(QMainWindow):
             )
             return
         mode = self.selected_fill_mode()
+        # Väärän opiskelijan suoja: katso, kenen lomake Chromessa on auki, ja näytä nimi
+        try:
+            student = self._probe_student()
+        except BrowserError as exc:
+            QMessageBox.warning(self, "Lomaketta ei löydy", str(exc))
+            return
+        who = (
+            f"OPISKELIJA: {student}\n\n"
+            if student
+            else "Opiskelijan nimeä ei tunnistettu lomakesivulta – tarkista välilehti.\n\n"
+        )
+        if student and self._wilma_student and self._wilma_student != student:
+            who += (
+                f"HUOM. Wilman rivit haettiin opiskelijalta {self._wilma_student}, mutta "
+                f"Chromessa on auki {student}.\n\n"
+            )
         text = (
-            f"Täytetään {total} riviä lähteistä:\n{', '.join(s.name for s in sheets)}\n\n"
-            f"Täyttötapa: {mode.label}.\n{mode.description}\n\n"
-            "Varmista, että opintokortin lomake on auki Chromessa."
+            f"{who}Täytetään {total} riviä lähteistä:\n{', '.join(s.name for s in sheets)}\n\n"
+            f"Täyttötapa: {mode.label}.\n{mode.description}"
+            + (
+                "\n\nLopuksi lisätään Pvm & päivittäjä -merkintä."
+                if self.update_row_check.isChecked()
+                else ""
+            )
         )
         if mode is FillMode.REPLACE:
             answer = QMessageBox.warning(
@@ -1213,13 +1302,21 @@ class MainWindow(QMainWindow):
         self.progress.setMaximum(total)
         self.progress.setValue(0)
         self.progress_label.setText(f"0 / {total} riviä")
-        self.worker = FillWorker(config, sheets, mode=mode)
+        self.worker = FillWorker(
+            config, sheets, mode=mode, update_row=self.update_row_check.isChecked()
+        )
         self.worker.progress.connect(self._on_progress)
         self.worker.finished_ok.connect(self._on_finished)
         self.worker.failed.connect(self._on_failed)
         self.worker.finished.connect(self._on_worker_done)
         self._set_running(True)
         self.worker.start()
+
+    def _probe_student(self) -> str:
+        """Kenen opintosuunnitelma Chromessa on auki. Nostaa BrowserError, jos lomaketta ei ole."""
+        with connect(self.config.browser) as browser:
+            page = find_form_page(browser, self.config.browser, self.config.selectors.table_body)
+            return student_name(page)
 
     def stop_fill(self) -> None:
         if self.worker is not None:
@@ -1252,7 +1349,8 @@ class MainWindow(QMainWindow):
             for s in summary.sheets
         ]
         text = (
-            f"Täyttötapa: {summary.mode.label}\n\n"
+            (f"Opiskelija: {summary.student}\n" if summary.student else "")
+            + f"Täyttötapa: {summary.mode.label}\n\n"
             + "\n".join(lines)
             + (f"\n\nYhteensä {summary.successful_rows}/{summary.total_rows} riviä onnistui.")
         )
@@ -1265,6 +1363,8 @@ class MainWindow(QMainWindow):
                 f"\nLomakkeen loppuun jäi {summary.cleared_rows} tyhjää riviä. "
                 "Poista ne Wilmassa käsin ennen tallennusta."
             )
+        if summary.update_row:
+            text += f"\nPvm & päivittäjä -merkintä lisätty: {summary.update_row}."
         if summary.failed_rows:
             text += f"\nVirheitä {summary.total_errors}. Katso loki: {self.config.log_file}"
             QMessageBox.warning(self, "Täyttö valmis, virheitä", text)

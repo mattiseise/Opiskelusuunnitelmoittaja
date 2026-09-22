@@ -9,7 +9,7 @@ import traceback
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from ..browser import BrowserError, connect, find_form_page
+from ..browser import BrowserError, connect, describe_page, find_form_page
 from ..config import Config
 from ..excel import PlanRow, Sheet
 from ..filler import FormFiller, Summary
@@ -49,6 +49,7 @@ class FillWorker(QThread):
         dry_run: bool = False,
         mode: FillMode | None = None,
         replace_existing: bool = False,
+        update_row: bool | None = None,
     ) -> None:
         super().__init__()
         self.config = config
@@ -57,6 +58,7 @@ class FillWorker(QThread):
         if mode is None:
             mode = FillMode.REPLACE if replace_existing else config.fill_mode
         self.mode = mode
+        self.update_row = config.add_update_row if update_row is None else update_row
         self._stop = threading.Event()
         self._done = 0
         self._total = sum(len(s.rows) for s in sheets)
@@ -101,6 +103,15 @@ class FillWorker(QThread):
                     self.progress.emit(0, self._total, "Poistetaan nykyiset rivit…")
                     filler.clear_rows()
                 summary: Summary = filler.process_sheets(self.sheets)
+                summary.student = describe_page(page)
+                if self.update_row and not self._stop.is_set():
+                    self.progress.emit(self._total, self._total, "Lisätään päivitysmerkintä…")
+                    try:
+                        summary.update_row = filler.add_update_row(name=self.config.teacher.name)
+                    except Exception as exc:
+                        logging.getLogger("suunnitelmoittaja.filler").warning(
+                            "Päivitysmerkintää ei voitu lisätä: %s", exc
+                        )
             self.finished_ok.emit(summary)
         except BrowserError as exc:
             self.failed.emit(str(exc))
@@ -112,7 +123,7 @@ class FillWorker(QThread):
 class ReadWorker(QThread):
     """Lukee lomakkeen nykyiset rivit avoimelta Wilma-välilehdeltä."""
 
-    finished_ok = Signal(object)  # list[PlanRow]
+    finished_ok = Signal(object, str)  # list[PlanRow], opiskelijan nimi (tai sivun otsikko)
     failed = Signal(str)
 
     def __init__(self, config: Config) -> None:
@@ -126,7 +137,8 @@ class ReadWorker(QThread):
                     browser, self.config.browser, self.config.selectors.table_body
                 )
                 rows: list[PlanRow] = FormFiller(page, self.config).read_rows()
-            self.finished_ok.emit(rows)
+                student = describe_page(page)
+            self.finished_ok.emit(rows, student)
         except BrowserError as exc:
             self.failed.emit(str(exc))
         except Exception as exc:

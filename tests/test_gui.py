@@ -507,3 +507,51 @@ def test_separator_rows_follow_reordering(qtbot, config_path: Path) -> None:
         "Välirivi",
         "Ohjelmistokehittäjä",
     ]
+
+
+def test_manual_row_added_below_selection_and_filled(qtbot, config_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert win.preview.rowCount() == 2
+    win.preview.selectRow(0)
+    idx = win.add_manual_row()
+    assert idx == 1  # valitun rivin alle
+    assert win.preview.rowCount() == 3
+    assert win.preview.item(1, 2).text() == "Oma rivi"  # type: ignore[union-attr]
+    assert win.preview_label.text().endswith("OMA RIVI")
+    win.preview.item(1, 3).setText("Käsin lisätty")  # type: ignore[union-attr]
+    win.preview.item(1, 4).setText("2")  # type: ignore[union-attr]
+    sheets = win.selected_sheets_for_fill()
+    assert [(s.name, [r.values["osaamistavoite"] for r in s.rows]) for s in sheets] == [
+        ("Ohjelmistokehittäjä", ["Ohjelmointi"]),
+        ("Oma rivi", ["Käsin lisätty"]),
+        ("Ohjelmistokehittäjä", ["Tietoturva"]),
+    ]
+    # muokkaus ja paikka säilyvät esikatselun uudelleenrakennuksessa
+    win.update_preview()
+    assert win.preview.item(1, 3).text() == "Käsin lisätty"  # type: ignore[union-attr]
+
+    # ilman valintaa uusi rivi menee loppuun
+    win.preview.clearSelection()
+    win.preview.setCurrentCell(-1, -1)
+    idx = win.add_manual_row()
+    assert idx == win.preview.rowCount() - 1
+    # roskakori poistaa myös oman rivin
+    win.delete_row(idx)
+    assert win.preview.rowCount() == 3
+
+
+def test_update_row_check_and_wilma_student(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.excel import PlanRow
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert win.update_row_check.isChecked()  # config.json: fill.update_row = true
+    row = PlanRow(
+        {"osaamistavoite": "W1", "laajuus": "", "suoritustapa": "", "suoritusajankohta": ""}
+    )
+    win._on_wilma_rows([row], "Testi Oppilas")
+    assert "opiskelijalta Testi Oppilas" in win.wilma_status.text()
+    assert win._wilma_student == "Testi Oppilas"
+    win.clear_wilma_rows()
+    assert win._wilma_student == ""

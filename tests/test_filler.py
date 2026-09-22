@@ -448,3 +448,58 @@ def test_empty_plan_row_becomes_blank_separator(page: Page, lomake_url: str) -> 
         "",
         "B1",
     ]
+
+
+# --- opiskelijan nimi ja päivitysmerkintä ---------------------------------------
+
+
+def _visible_values(page: Page, tbody: str) -> list[list[str]]:
+    """Kuten _table_values, mutta ilman piilokenttiä (Wilman __default- ja __id-kentät)."""
+    return page.evaluate(
+        "id => [...document.querySelectorAll(id + ' > tr')]"
+        ".map(tr => [...tr.querySelectorAll('input:not([type=hidden])')].map(i => i.value))",
+        tbody,
+    )
+
+
+def test_student_name_from_breadcrumb(page: Page, wilma_url: str, lomake_url: str) -> None:
+    from opiskelusuunnitelmoittaja.browser import describe_page, student_name
+
+    page.goto(wilma_url)
+    assert student_name(page) == "Testi Oppilas"
+    assert describe_page(page) == "Testi Oppilas"
+    page.goto(lomake_url)
+    assert student_name(page) == ""
+    assert describe_page(page).startswith("Testilomake")  # otsikko, kun nimeä ei ole
+
+
+def test_add_update_row_uses_wilma_default_name(page: Page, wilma_url: str) -> None:
+    from datetime import date
+
+    page.goto(wilma_url)
+    result = FormFiller(page, CFG).add_update_row(today=date(2026, 9, 22), name="Varanimi")
+    assert result == "22.9.2026 · Opettaja Testi"  # nimi Wilman __default-piilokentästä
+    meta = _visible_values(page, "#meta-rows")
+    assert meta[0][:2] == ["14.4.2025", "Opettaja Testi"]  # vanha rivi säilyi
+    assert len(meta) == 2
+    assert meta[1][0] == "22.9.2026"
+    assert meta[1][1] == "Opettaja Testi"
+
+
+def test_add_update_row_reuses_empty_row_and_fallback_name(page: Page, lomake_url: str) -> None:
+    from datetime import date
+
+    page.goto(lomake_url)  # meta-taulukon valmis rivi on tyhjä → käytetään sitä, ei lisätä
+    result = FormFiller(page, CFG).add_update_row(today=date(2026, 1, 5), name="Matti Seise")
+    assert result == "5.1.2026 · Matti Seise"
+    assert _table_values(page, "#meta-rows") == [["5.1.2026", "Matti Seise"]]
+    # toinen kutsu lisää uuden rivin (viimeinen ei ole enää tyhjä)
+    FormFiller(page, CFG).add_update_row(today=date(2026, 1, 6), name="Matti Seise")
+    assert len(_table_values(page, "#meta-rows")) == 2
+
+
+def test_add_update_row_missing_table_raises(page: Page, lomake_url: str) -> None:
+    page.goto(lomake_url)
+    cfg = replace(CFG, selectors=replace(CFG.selectors, update_table_body="#ei-ole"))
+    with pytest.raises(RuntimeError, match="Pvm & päivittäjä"):
+        FormFiller(page, cfg).add_update_row(name="x")

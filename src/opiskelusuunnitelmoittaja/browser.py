@@ -93,6 +93,39 @@ def connect(cfg: BrowserConfig) -> Iterator[Browser]:
         pw.stop()
 
 
+STUDENT_LINK = ".breadcrumb a[href*='/profiles/students/']"
+
+
+def student_name(page: Page) -> str:
+    """Opiskelijan nimi lomakesivun leivänmurupolusta; tyhjä, jos sitä ei löydy.
+
+    Wilman opintokortin polku on Oma etusivu › Opiskelijat › Koulu › Ryhmä › *Opiskelija* ›
+    Opintosuunnitelma. Opiskelijan linkki osoittaa /profiles/students/<id>; listalinkki
+    /profiles/students ei osu valitsimeen, koska siitä puuttuu kauttaviiva ja tunnus.
+    """
+    try:
+        links = page.locator(STUDENT_LINK)
+        n = links.count()
+        if n == 0:
+            return ""
+        text = links.nth(n - 1).inner_text(timeout=2000)
+        return " ".join(text.replace("\xa0", " ").split())
+    except Exception as exc:  # sivu vaihtui kesken tai ei ole Wilma
+        log.debug("Opiskelijan nimeä ei saatu: %s", exc)
+        return ""
+
+
+def describe_page(page: Page) -> str:
+    """Lyhyt kuvaus vahvistusikkunaan: opiskelijan nimi tai sivun otsikko/osoite."""
+    name = student_name(page)
+    if name:
+        return name
+    try:
+        return page.title() or page.url
+    except Exception:
+        return page.url
+
+
 def find_form_page(browser: Browser, cfg: BrowserConfig, form_selector: str) -> Page:
     """Etsi välilehti, jolla lomake on.
 

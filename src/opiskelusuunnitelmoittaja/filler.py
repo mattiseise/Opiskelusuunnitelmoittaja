@@ -7,6 +7,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 
 from playwright.sync_api import Locator, Page
 
@@ -38,6 +39,8 @@ class Summary:
     mode: FillMode = FillMode.APPEND
     removed_rows: int = 0  # korvaustilassa poistonapilla poistetut rivit
     cleared_rows: int = 0  # korvaustilassa tyhjiksi jääneet rivit (Wilmassa käsin poistettavat)
+    update_row: str = ""  # lisätty Pvm & päivittäjä -merkintä, esim. "22.9.2026 · Seise Matti"
+    student: str = ""  # lomakesivulta tunnistettu opiskelija
 
     @property
     def total_rows(self) -> int:
@@ -318,12 +321,15 @@ class FormFiller:
         if failures:
             raise RuntimeError("; ".join(failures))
 
-    def add_table_row(self) -> Locator:
-        """Paina lisäysnappia ja palauta lisätty (viimeinen) rivi."""
-        tbody = self._tbody()
-        rows = self._rows()
+    def add_table_row(self, tbody: Locator | None = None) -> Locator:
+        """Paina lisäysnappia ja palauta lisätty (viimeinen) rivi.
+
+        ``tbody`` = muu taulukko kuin opintotaulukko (esim. Pvm & päivittäjä).
+        """
+        tbody = self._tbody() if tbody is None else tbody
+        rows = tbody.locator(":scope > tr")
         before = rows.count()
-        button = self._add_button()
+        button = self._add_button(tbody)
         self._retry(
             lambda: (button.scroll_into_view_if_needed(), button.click()),
             what="rivin lisäys",
@@ -333,6 +339,74 @@ class FormFiller:
             arg=[tbody.element_handle(), before],
         )
         return rows.nth(rows.count() - 1)
+
+    def add_update_row(self, *, today: date | None = None, name: str = "") -> str:
+        """Lisää Pvm & päivittäjä -taulukkoon merkintä tälle päivälle.
+
+        Wilman lomakkeella on toinen taulukko (Päivitetty, Päivittäjä). Taulukon viimeinen
+        rivi käytetään, jos sen päivämäärä on tyhjä; muuten painetaan sen lisäysnappia.
+        Päivämäärä täytetään vain, jos Wilma ei täyttänyt sitä itse; päivittäjän nimi
+        otetaan Wilman piilokentän oletuksesta ("992:Seise Matti" → "Seise Matti"), tai
+        ``name``-parametrista. Palauttaa lyhyen kuvauksen lokiin ja yhteenvetoon.
+        """
+        if self.dry_run:
+            log.info("[kuiva-ajo] päivitysmerkintä")
+            return "(kuiva-ajo)"
+        sel = self.selectors
+        tbodies = self.page.locator(sel.update_table_body)
+        if tbodies.count() == 0:
+            raise RuntimeError(
+                f"Pvm & päivittäjä -taulukkoa ei löydy valitsimella {sel.update_table_body!r}"
+            )
+        tbody = tbodies.first
+        rows = tbody.locator(":scope > tr")
+        count = rows.count()
+
+        def controls(row: Locator) -> tuple[Locator, Locator]:
+            return (
+                row.locator(sel.update_date_cell).locator(sel.input_in_cell).first,
+                row.locator(sel.update_name_cell).locator(sel.input_in_cell).first,
+            )
+
+        target: Locator | None = None
+        if count:
+            last = rows.nth(count - 1)
+            date_ctrl, _ = controls(last)
+            if date_ctrl.count() and date_ctrl.input_value().strip() == "":
+                target = last
+        if target is None:
+            target = self.add_table_row(tbody)
+        date_ctrl, name_ctrl = controls(target)
+
+        day = today or date.today()
+        date_text = f"{day.day}.{day.month}.{day.year}"
+        if date_ctrl.count() == 0:
+            raise RuntimeError("päivämääräkenttää ei löydy päivitystaulukon riviltä")
+        if date_ctrl.input_value().strip() == "":
+            date_ctrl.fill(date_text)
+        else:
+            date_text = date_ctrl.input_value().strip()  # Wilma täytti oletuksen itse
+
+        who = ""
+        if name_ctrl.count():
+            who = name_ctrl.input_value().strip()
+            if not who:
+                default = target.locator("input[type='hidden'][id$='__default']")
+                for i in range(default.count()):
+                    value = str(default.nth(i).get_attribute("value") or "")
+                    if (":" in value and not value[0].isdigit()) or value.count(":") == 1:
+                        candidate = value.split(":", 1)[-1].strip()
+                        if candidate and not candidate[0].isdigit():
+                            who = candidate
+                            break
+                who = who or name.strip()
+                if who:
+                    name_ctrl.fill(who)
+        summary = f"{date_text}{' · ' + who if who else ''}"
+        log.info("Päivitysmerkintä lisätty: %s", summary)
+        if not who:
+            log.warning("Päivittäjän nimeä ei saatu; täytä se Wilmassa käsin.")
+        return summary
 
     # --- sisäiset apurit ----------------------------------------------------
 
@@ -355,11 +429,12 @@ class FormFiller:
     def _rows(self) -> Locator:
         return self._tbody().locator(":scope > tr")
 
-    def _add_button(self) -> Locator:
+    def _add_button(self, tbody: Locator | None = None) -> Locator:
         """Lisäysnappi mahdollisimman läheltä kohdetaulukkoa: taulukon sisältä,
         sen vanhemmasta tai isovanhemmasta; viimeisenä koko sivulta."""
         sel = self.selectors.add_row_button
-        table = self._tbody().locator("xpath=ancestor::table[1]")
+        tbody = self._tbody() if tbody is None else tbody
+        table = tbody.locator("xpath=ancestor::table[1]")
         for scope in (table, table.locator("xpath=.."), table.locator("xpath=../..")):
             candidate = scope.locator(sel)
             if candidate.count() > 0:

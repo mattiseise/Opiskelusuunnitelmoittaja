@@ -96,6 +96,22 @@ def test_fill_section_parsed_and_roundtripped() -> None:
         "osaamistavoite"
     )
     data = config_to_dict(cfg)
-    assert data["fill"] == {"mode": "replace", "key_field": "laajuus"}
+    assert data["fill"] == {"mode": "replace", "key_field": "laajuus", "update_row": True}
     assert data["selectors"]["remove_row_button"] == "[id$='__del']"
     assert config_from_dict(data).fill_mode is FillMode.REPLACE
+
+
+def test_update_row_settings_roundtrip() -> None:
+    from opiskelusuunnitelmoittaja.config import config_to_dict
+
+    cfg = Config()
+    assert cfg.add_update_row is True
+    assert "Päivitetty" in cfg.selectors.update_table_body
+    cfg = config_from_dict(
+        {"fill": {"update_row": False}, "selectors": {"update_date_cell": "td:nth-child(2)"}}
+    )
+    assert cfg.add_update_row is False
+    assert cfg.selectors.update_date_cell == "td:nth-child(2)"
+    data = config_to_dict(cfg)
+    assert data["fill"]["update_row"] is False
+    assert config_from_dict(data).selectors.update_date_cell == "td:nth-child(2)"
