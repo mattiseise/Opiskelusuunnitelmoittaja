@@ -38,14 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_TITLE, __version__
-from ..browser import (
-    BrowserError,
-    connect,
-    find_form_page,
-    is_chrome_listening,
-    launch_chrome,
-    student_name,
-)
+from ..browser import BrowserError, is_chrome_listening, launch_chrome
 from ..config import Config, ConfigError, load_config
 from ..contact import QUESTION as CONTACT_QUESTION
 from ..excel import ExcelError, PlanRow, Sheet, list_sheets, read_sheet
@@ -57,7 +50,7 @@ from . import theme
 from .preview_table import GRIP, GripDelegate, PreviewTable, TrashDelegate
 from .settings_dialog import SettingsDialog
 from .update_panel import AVAILABLE_TEXT, UpdateWorker
-from .worker import FillWorker, QtLogHandler, ReadWorker
+from .worker import FillWorker, ProbeWorker, QtLogHandler, ReadWorker
 
 log = logging.getLogger("suunnitelmoittaja.gui")
 TIME_FIELD = "suoritusajankohta"
@@ -98,6 +91,8 @@ class MainWindow(QMainWindow):
             "OpintosuunnitelmanTayttaja",
         )
         self.worker: FillWorker | None = None
+        self.prober: ProbeWorker | None = None  # opiskelijan tarkistus ennen täyttöä
+        self._pending_fill: tuple[list[Sheet], FillMode] | None = None  # odottaa tarkistusta
         self._available_sheets: list[str] = []
         self._preview_sheets: list[Sheet] = []
         self._preview_rows: list[PreviewRow] = []
@@ -1247,11 +1242,10 @@ class MainWindow(QMainWindow):
             )
 
     def start_fill(self) -> None:
-        if self.worker is not None:
+        if self.worker is not None or self.prober is not None:
             return
         sheets = self.selected_sheets_for_fill()
-        total = sum(len(s.rows) for s in sheets)
-        if total == 0:
+        if sum(len(s.rows) for s in sheets) == 0:
             return
         if not is_chrome_listening(self.config.browser):
             QMessageBox.warning(
@@ -1260,13 +1254,36 @@ class MainWindow(QMainWindow):
                 "Käynnistä Chrome ensin ja avaa lomakesivu siihen ikkunaan.",
             )
             return
-        mode = self.selected_fill_mode()
-        # Väärän opiskelijan suoja: katso, kenen lomake Chromessa on auki, ja näytä nimi
-        try:
-            student = self._probe_student()
-        except BrowserError as exc:
-            QMessageBox.warning(self, "Lomaketta ei löydy", str(exc))
+        # Väärän opiskelijan suoja: katso ensin, kenen lomake Chromessa on auki, ja näytä nimi
+        # vahvistuksessa. Taustasäikeessä, jotta ikkuna ei jäädy, jos Chrome ei vastaa.
+        self._pending_fill = (sheets, self.selected_fill_mode())
+        self.log_view.clear()
+        self.btn_fill.setEnabled(False)
+        self.statusBar().showMessage("Tarkistetaan Chromessa avattua lomaketta…")
+        self.prober = ProbeWorker(self.config)
+        self.prober.finished_ok.connect(self._on_probe_ok)
+        self.prober.failed.connect(self._on_probe_failed)
+        self.prober.finished.connect(self._on_probe_done)
+        self.prober.start()
+
+    @Slot(str)
+    def _on_probe_failed(self, message: str) -> None:
+        self._pending_fill = None
+        QMessageBox.warning(self, "Lomaketta ei löydy", message)
+
+    def _on_probe_done(self) -> None:
+        self.prober = None
+        if self.worker is None:
+            self.btn_fill.setEnabled(bool(self.checked_row_indices()))
+            self.statusBar().clearMessage()
+
+    @Slot(str)
+    def _on_probe_ok(self, student: str) -> None:
+        if self._pending_fill is None:
             return
+        sheets, mode = self._pending_fill
+        self._pending_fill = None
+        total = sum(len(s.rows) for s in sheets)
         who = (
             f"OPISKELIJA: {student}\n\n"
             if student
@@ -1301,7 +1318,6 @@ class MainWindow(QMainWindow):
 
         # Välirivit ovat jo esikatselun riveinä (lähde "Välirivi"), joten täyttäjä ei lisää omiaan
         config = replace(self.config, separator_row_between_sheets=False)
-        self.log_view.clear()
         self.progress.setMaximum(total)
         self.progress.setValue(0)
         self.progress_label.setText(f"0 / {total} riviä")
@@ -1314,12 +1330,6 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self._on_worker_done)
         self._set_running(True)
         self.worker.start()
-
-    def _probe_student(self) -> str:
-        """Kenen opintosuunnitelma Chromessa on auki. Nostaa BrowserError, jos lomaketta ei ole."""
-        with connect(self.config.browser) as browser:
-            page = find_form_page(browser, self.config.browser, self.config.selectors.table_body)
-            return student_name(page)
 
     def stop_fill(self) -> None:
         if self.worker is not None:

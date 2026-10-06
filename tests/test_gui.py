@@ -557,3 +557,41 @@ def test_update_row_check_and_wilma_student(qtbot, config_path: Path) -> None:
     assert win._wilma_student == "Testi Oppilas"
     win.clear_wilma_rows()
     assert win._wilma_student == ""
+
+
+def test_start_fill_probes_student_in_background(
+    qtbot, config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Chromea ei kysytä käyttöliittymäsäikeessä: jumiutunut välilehti jäädytti ikkunan."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from opiskelusuunnitelmoittaja.gui import main_window
+    from opiskelusuunnitelmoittaja.gui.worker import ProbeWorker
+
+    shown: list[str] = []
+
+    def answer_no(_parent, _title, text, *_args):
+        shown.append(text)
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(main_window, "is_chrome_listening", lambda *_a, **_k: True)
+    monkeypatch.setattr(QMessageBox, "question", answer_no)
+    monkeypatch.setattr(QMessageBox, "warning", answer_no)
+    monkeypatch.setattr(ProbeWorker, "run", lambda self: self.finished_ok.emit("Testi Oppilas"))
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    assert win.checked_row_indices()
+    win.start_fill()
+    assert win.prober is not None  # start_fill palasi odottamatta Chromea
+    assert not win.btn_fill.isEnabled()
+    qtbot.waitUntil(lambda: win.prober is None, timeout=5000)
+    assert "OPISKELIJA: Testi Oppilas" in shown[0]
+    assert win.worker is None  # vahvistukseen vastattiin Ei
+    assert win.btn_fill.isEnabled()
+
+    monkeypatch.setattr(ProbeWorker, "run", lambda self: self.failed.emit("Lomaketta ei löytynyt"))
+    win.start_fill()
+    qtbot.waitUntil(lambda: win.prober is None, timeout=5000)
+    assert shown[-1] == "Lomaketta ei löytynyt"
+    assert win.btn_fill.isEnabled()

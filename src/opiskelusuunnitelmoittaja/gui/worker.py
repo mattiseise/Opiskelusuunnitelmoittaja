@@ -9,7 +9,7 @@ import traceback
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from ..browser import BrowserError, connect, describe_page, find_form_page
+from ..browser import BrowserError, connect, describe_page, find_form_page, student_name
 from ..config import Config
 from ..excel import PlanRow, Sheet
 from ..filler import FormFiller, Summary
@@ -113,6 +113,34 @@ class FillWorker(QThread):
                             "Päivitysmerkintää ei voitu lisätä: %s", exc
                         )
             self.finished_ok.emit(summary)
+        except BrowserError as exc:
+            self.failed.emit(str(exc))
+        except Exception as exc:
+            logging.getLogger("suunnitelmoittaja.gui").debug(traceback.format_exc())
+            self.failed.emit(f"Odottamaton virhe: {exc}")
+
+
+class ProbeWorker(QThread):
+    """Katsoo ennen täyttöä, kenen lomake Chromessa on auki (väärän opiskelijan suoja).
+
+    Erillisessä säikeessä, jotta ikkuna ei jäädy, vaikka Chrome tai välilehti ei vastaisi.
+    """
+
+    finished_ok = Signal(str)  # opiskelijan nimi; tyhjä, jos sitä ei tunnistettu
+    failed = Signal(str)
+
+    def __init__(self, config: Config) -> None:
+        super().__init__()
+        self.config = config
+
+    def run(self) -> None:
+        try:
+            with connect(self.config.browser) as browser:
+                page = find_form_page(
+                    browser, self.config.browser, self.config.selectors.table_body
+                )
+                student = student_name(page)
+            self.finished_ok.emit(student)
         except BrowserError as exc:
             self.failed.emit(str(exc))
         except Exception as exc:

@@ -393,6 +393,13 @@ sulje se ensin tai anna eri `user_data_dir`.
 Chromessa, joka käynnistettiin etädebuggauksella, tai `selectors.table_body` ei osu.
 Aseta `browser.page_url_contains`, jos oikea välilehti pitää valita osoitteen perusteella.
 
+**"Välilehti avattiin uudelleen" lokissa** – Chrome oli esiladannut sivun (esim. osoiteriville
+kirjoitettu Wilman osoite), eikä Playwright saa sellaista välilehteä haltuunsa: kaikki kyselyt
+siihen jäisivät odottamaan ikuisesti. Sovellus avaa sivun uuteen välilehteen ja sulkee vanhan.
+Jos vanhassa oli tallentamattomia muutoksia, se jää auki; sulje se itse. Sovelluksen
+käynnistämässä Chromessa esilataus on pois päältä (`--disable-features=Prerender2`), joten
+tilanne syntyy vain Chromessa, joka on käynnistetty ennen versiota 2.5.4 tai käsin ilman valitsinta.
+
 **"Välilehdeltä puuttuvat sarakkeet"** – Excelin otsikkorivi ei vastaa `excel_columns`-asetusta.
 Virheilmoitus listaa löydetyt otsikot.
 
@@ -404,7 +411,7 @@ Tarkista napin `id` selaimen kehittäjätyökaluilla.
 ```bash
 uv sync --extra gui                      # asentaa myös dev-riippuvuudet ja PySide6
 uv run playwright install chromium       # testien selain (kerran)
-uv run pytest                            # 96 testiä: selaintestit + GUI offscreen
+uv run pytest                            # 106 testiä: selaintestit + GUI offscreen
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
 ```

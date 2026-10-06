@@ -47,6 +47,8 @@ class BrowserConfig:
         return [
             f"--remote-debugging-port={self.remote_debugging_port}",
             f"--user-data-dir={self.resolved_user_data_dir()}",
+            # Esiladattua ja sitten avattua välilehteä Playwright ei saa haltuunsa (browser.py)
+            "--disable-features=Prerender2",
         ]
 
     def launch_command(self) -> str:

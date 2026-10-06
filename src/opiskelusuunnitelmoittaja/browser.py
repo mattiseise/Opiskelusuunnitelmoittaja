@@ -9,9 +9,10 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from .config import BrowserConfig
 
@@ -131,29 +132,102 @@ def find_form_page(browser: Browser, cfg: BrowserConfig, form_selector: str) -> 
     """Etsi välilehti, jolla lomake on.
 
     Ensisijaisesti URL-osuman, toissijaisesti lomake-elementin perusteella.
+
+    Välilehteä, jota Playwright ei saanut haltuunsa (``page.url`` on tyhjä), ei tarkasteta,
+    koska jokainen kysely siihen jäisi odottamaan ikuisesti. Sen osoite kysytään Chromelta
+    ja sivu avataan uuteen välilehteen (ks. ``_reopen``).
     """
     pages = [p for ctx in browser.contexts for p in ctx.pages]
     if not pages:
         raise BrowserError("Chromessa ei ole yhtään avointa välilehteä.")
+    usable = [p for p in pages if p.url]
+    stuck = [(p, _target_url(p)) for p in pages if not p.url]
+    open_urls = [p.url for p in usable] + [url for _p, url in stuck]
 
     if cfg.page_url_contains:
-        for page in pages:
+        for page in usable:
             if cfg.page_url_contains in page.url:
                 log.info("Lomakesivu löytyi URL-osumalla: %s", page.url)
                 return page
+        for page, url in stuck:
+            if cfg.page_url_contains in url:
+                fresh = _reopen(page, url, None)
+                if fresh is not None:
+                    return fresh
         raise BrowserError(
             f"Yhtään välilehteä, jonka osoite sisältää '{cfg.page_url_contains}', ei ole auki. "
-            f"Avoinna: {[p.url for p in pages]}"
+            f"Avoinna: {open_urls}"
         )
 
-    for page in pages:
+    for page in usable:
         try:
             if page.locator(form_selector).count() > 0:
                 log.info("Lomakesivu löytyi lomake-elementin perusteella: %s", page.url)
                 return page
         except Exception as exc:  # esim. chrome:// -sivut
             log.debug("Välilehteä %s ei voitu tarkastaa: %s", page.url, exc)
+    for page, url in stuck:
+        if url.startswith(("http://", "https://")):
+            fresh = _reopen(page, url, form_selector)
+            if fresh is not None:
+                return fresh
     raise BrowserError(
         "Lomaketta ei löytynyt miltään avoimelta välilehdeltä. Avaa lomakesivu Chromessa "
-        f"ja yritä uudelleen. Avoinna: {[p.url for p in pages]}"
+        f"ja yritä uudelleen. Avoinna: {open_urls}"
     )
+
+
+def _target_url(page: Page) -> str:
+    """Välilehden osoite suoraan Chromelta; toimii myös, kun Playwright ei hallitse sivua."""
+    try:
+        session = page.context.new_cdp_session(page)
+        try:
+            info = session.send("Target.getTargetInfo")
+        finally:
+            session.detach()
+        return str(info.get("targetInfo", {}).get("url", ""))
+    except Exception as exc:
+        log.debug("Välilehden osoitetta ei saatu Chromelta: %s", exc)
+        return ""
+
+
+def _reopen(page: Page, url: str, form_selector: str | None) -> Page | None:
+    """Avaa välilehden osoite uuteen välilehteen ja sulje vanha.
+
+    Kun Chrome on esiladannut sivun (esim. osoiteriville kirjoitettu osoite) ja välilehti
+    siirtyy siihen, välilehden pääkehyksen tunniste ei enää ole välilehden oma. Playwright
+    olettaa ne samoiksi, joten sivun alustus jää kesken ja välilehti pysyy käyttökelvottomana
+    myös myöhemmillä sivulatauksilla. Uusi välilehti toimii.
+
+    Jos ``form_selector`` on annettu eikä uudella välilehdellä ole lomaketta, uusi suljetaan,
+    vanhaan ei kosketa ja palautetaan None. Vanha suljetaan ``beforeunload``-käsittelyn kautta:
+    jos sivu kysyy poistumisvahvistusta (tallentamattomia muutoksia), välilehti jää auki.
+    """
+    fresh = page.context.new_page()
+    try:
+        fresh.goto(url, wait_until="load")
+        if form_selector is not None and fresh.locator(form_selector).count() == 0:
+            fresh.close()
+            return None
+    except Exception as exc:
+        log.debug("Välilehteä %s ei voitu avata uudelleen: %s", url, exc)
+        with suppress(Exception):
+            fresh.close()
+        return None
+    log.info(
+        "Välilehti avattiin uudelleen, koska Playwright ei saanut sitä haltuunsa "
+        "(Chromen esilataama sivu): %s",
+        url,
+    )
+    with suppress(Exception):
+        page.close(run_before_unload=True)
+        if not page.is_closed():
+            with suppress(PlaywrightTimeoutError):
+                page.wait_for_event("close", timeout=3000)
+    if not page.is_closed():
+        log.warning(
+            "Vanha välilehti jäi auki (siinä voi olla tallentamattomia muutoksia). Sulje se, "
+            "ettei samaa lomaketta tallenneta kahdesta välilehdestä."
+        )
+    fresh.bring_to_front()
+    return fresh

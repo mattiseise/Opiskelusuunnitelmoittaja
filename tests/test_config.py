@@ -72,6 +72,7 @@ def test_launch_command_mentions_port_and_profile() -> None:
     cmd = cfg.launch_command()
     assert "--remote-debugging-port=9222" in cmd
     assert str(Path("/tmp/profiili")) in cmd  # Windowsissa polku tulostuu kenoviivoilla
+    assert "--disable-features=Prerender2" in cmd  # esilataus jumittaisi Playwrightin
 
 
 def test_fill_section_parsed_and_roundtripped() -> None:
