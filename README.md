@@ -411,7 +411,7 @@ Tarkista napin `id` selaimen kehittäjätyökaluilla.
 ```bash
 uv sync --extra gui                      # asentaa myös dev-riippuvuudet ja PySide6
 uv run playwright install chromium       # testien selain (kerran)
-uv run pytest                            # 106 testiä: selaintestit + GUI offscreen
+uv run pytest                            # 108 testiä: selaintestit + GUI offscreen
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
 ```

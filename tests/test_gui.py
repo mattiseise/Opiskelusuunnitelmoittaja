@@ -260,10 +260,11 @@ def test_no_main_sheet_option_and_wilma_only(qtbot, config_path: Path) -> None:
     sheets = win.selected_sheets_for_fill()
     assert [s.name for s in sheets] == ["Wilma"]
 
-    # Wilman rivien poisto palauttaa ensimmäisen pääsuuntauksen
+    # Wilman rivien poisto palauttaa ensimmäisen pääsuuntauksen; lisävalinta pysyy pois,
+    # koska Wilman lataus tyhjensi valinnat
     win.clear_wilma_rows()
     assert win.main_group.buttons()[0].isChecked()
-    assert win.selected_sheet_names() == ["Ohjelmistokehittäjä", "Rikki"]
+    assert win.selected_sheet_names() == ["Ohjelmistokehittäjä"]
 
 
 def test_fill_worker_replace_mode_clears_first(qtbot, config_path: Path, excel_file: Path) -> None:
@@ -595,3 +596,64 @@ def test_start_fill_probes_student_in_background(
     qtbot.waitUntil(lambda: win.prober is None, timeout=5000)
     assert shown[-1] == "Lomaketta ei löytynyt"
     assert win.btn_fill.isEnabled()
+
+
+def test_wilma_load_clears_sheet_selection_and_selects_replace(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.excel import PlanRow
+    from opiskelusuunnitelmoittaja.fillmode import FillMode
+    from opiskelusuunnitelmoittaja.gui.main_window import WILMA_SHEET
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.separator_check.setChecked(False)
+    win.contact_check.setEnabled(True)  # testi ei määritä opettajan yhteystietoja
+    win.contact_check.setChecked(True)
+    optional = [
+        w
+        for i in range(win.optional_layout.count())
+        if isinstance((w := win.optional_layout.itemAt(i).widget()), QCheckBox)  # type: ignore[union-attr]
+    ]
+    assert any(w.isChecked() for w in optional)  # config: lisävalinta oletuksena päällä
+    assert win.selected_sheet_names()
+    assert win.mode_append.isChecked()
+
+    wilma = [
+        PlanRow(
+            {"osaamistavoite": "W1", "laajuus": "5", "suoritustapa": "x", "suoritusajankohta": ""}
+        )
+    ]
+    win._on_wilma_rows(wilma)
+
+    assert not any(w.isChecked() for w in optional)
+    assert not win.contact_check.isChecked()
+    assert win.selected_sheet_names() == []
+    assert win.rb_no_main is not None and win.rb_no_main.isChecked()
+    assert win.mode_replace.isChecked()
+    assert win.selected_fill_mode() is FillMode.REPLACE
+    # Wilman rivi jää valituksi: korvaus kirjoittaa saman suunnitelman takaisin
+    wilma_rows = [r for r in win._preview_rows if r.sheet == WILMA_SHEET]
+    assert [r.checked for r in wilma_rows] == [True]
+    assert win.preview.rowCount() == 1
+
+
+def test_wilma_load_clears_manual_sheet_selection(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.excel import PlanRow
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.separator_check.setChecked(False)
+    win.manual_toggle.setChecked(True)
+    win.manual_list.item(0).setCheckState(Qt.CheckState.Checked)
+    assert win.selected_sheet_names() == [win.manual_list.item(0).text()]
+
+    win._on_wilma_rows(
+        [
+            PlanRow(
+                {"osaamistavoite": "W1", "laajuus": "", "suoritustapa": "", "suoritusajankohta": ""}
+            )
+        ]
+    )
+
+    assert win.selected_sheet_names() == []
+    assert win.manual_list.item(0).checkState() == Qt.CheckState.Unchecked
+    assert win.mode_replace.isChecked()

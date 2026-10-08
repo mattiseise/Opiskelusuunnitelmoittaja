@@ -1041,9 +1041,12 @@ class MainWindow(QMainWindow):
         self._unchecked = {k for k in self._unchecked if k[0] != WILMA_SHEET}
         self._deleted = {k for k in self._deleted if k[0] != WILMA_SHEET}
         self._order = []
-        if rows and self.rb_no_main is not None and not self.manual_toggle.isChecked():
-            # Wilman rivit korvaavat pääsuuntauksen; Excelin suuntauksen voi valita takaisin
-            self.rb_no_main.setChecked(True)
+        if rows:
+            # Suunnitelma on jo Wilmassa, joten lisättäviksi jää vain se, minkä käyttäjä valitsee
+            self._clear_sheet_selection()
+            if self.rb_no_main is not None and not self.manual_toggle.isChecked():
+                # Wilman rivit korvaavat pääsuuntauksen; Excelin suuntauksen voi valita takaisin
+                self.rb_no_main.setChecked(True)
         self.update_preview()
         self._refresh_wilma_status()
         if rows:
@@ -1053,6 +1056,17 @@ class MainWindow(QMainWindow):
             )
         else:
             self.statusBar().showMessage("Lomakkeella ei ole rivejä.", 4000)
+
+    def _clear_sheet_selection(self) -> None:
+        """Tyhjennä vaiheen 3 valinnat: lisävalinnat, käsin valitut välilehdet, yhteystiedot."""
+        for i in range(self.optional_layout.count()):
+            item = self.optional_layout.itemAt(i)
+            w = item.widget() if item is not None else None
+            if isinstance(w, QCheckBox):
+                w.setChecked(False)
+        for i in range(self.manual_list.count()):
+            self.manual_list.item(i).setCheckState(Qt.CheckState.Unchecked)
+        self.contact_check.setChecked(False)
 
     def _refresh_wilma_status(self) -> None:
         n = len(self._wilma_rows)
