@@ -25,6 +25,8 @@ TOKENS = {
     "hairline": "rgba(31,24,19,0.15)",
     "hairline_strong": "rgba(31,24,19,0.18)",
     "grid_cell_bg": "rgba(234,223,201,0.35)",
+    "selected_bg": "rgba(105,1,59,0.13)",  # burgundi läpikuultavana: valittu taulukon rivi
+    "selected_line": "rgba(105,1,59,0.55)",
     "hairline_on_dark": "rgba(244,236,221,0.25)",
     "muted_on_dark": "rgba(234,223,201,0.7)",
 }
@@ -201,6 +203,11 @@ def build_qss() -> str:
         selection-background-color: {t["bg2"]}; selection-color: {t["ink"]};
     }}
     QTableWidget::item, QListWidget::item {{ padding: 4px 8px; border-bottom: 1px solid {t["hairline"]}; }}
+    /* Valittu rivi erottuu selvästi myös, kun kohdistus on napissa (ei :active-ehtoa) */
+    QTableWidget::item:selected {{
+        background: {t["selected_bg"]}; color: {t["ink"]};
+        border-bottom: 1px solid {t["selected_line"]};
+    }}
     QHeaderView {{ background: {t["bg2"]}; }}
     QHeaderView::section {{
         background: {t["bg2"]}; color: {t["ink_soft"]}; font-size: 11px; font-weight: 600;

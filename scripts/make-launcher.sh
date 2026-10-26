@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tekee kehityskäynnistimen macOS:lle: ~/Applications/Opintosuunnitelman muokkaaja.app
 # Käynnistin ajaa `uv run suunnitelmoittaja-gui` tästä repokansiosta, joten koodimuutokset
-# näkyvät heti ilman PyInstaller-buildia. Ikoni tehdään packaging/icon.png:stä.
+# näkyvät heti ilman PyInstaller-buildia. Ikoni on packaging/icon.icns (scripts/make-icons.py).
 #
 #   scripts/make-launcher.sh            → ~/Applications/Opintosuunnitelman muokkaaja.app
 #   scripts/make-launcher.sh --dock     → sama + lisää Dockiin
@@ -49,15 +49,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 
-# PNG → ICNS (sips + iconutil ovat macOS:n mukana)
-ICONSET="$(mktemp -d)/icon.iconset"
-mkdir -p "$ICONSET"
-for s in 16 32 64 128 256 512; do
-  sips -z $s $s "$REPO/packaging/icon.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
-  d=$((s*2)); sips -z $d $d "$REPO/packaging/icon.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
-done
-iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/icon.icns"
-rm -rf "$(dirname "$ICONSET")"
+# Valmis ICNS (scripts/make-icons.py), jossa pienet koot on piirretty erikseen teräviksi
+cp "$REPO/packaging/icon.icns" "$APP/Contents/Resources/icon.icns"
 touch "$APP"  # Finder päivittää ikonin
 
 echo "✔ $APP"

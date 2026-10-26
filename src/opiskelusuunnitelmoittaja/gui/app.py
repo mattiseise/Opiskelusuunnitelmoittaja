@@ -10,10 +10,16 @@ from ..paths import ensure_user_files, resource_path, user_config_path
 
 
 def icon_path() -> Path | None:
-    """Sovelluskuvake: paketissa juuressa, kehityksessä packaging/-kansiossa."""
-    for candidate in (resource_path("icon.png"), resource_path("packaging") / "icon.png"):
-        if candidate.exists():
-            return candidate
+    """Sovelluskuvake: paketissa juuressa, kehityksessä packaging/-kansiossa.
+
+    Windowsissa monikokoinen .ico, jonka 16–48 px:n koot on piirretty teräviksi tehtäväpalkkia
+    varten; muualla 1024 px:n PNG (macOS:n Dock).
+    """
+    names = ("icon.ico", "icon.png") if sys.platform == "win32" else ("icon.png",)
+    for name in names:
+        for candidate in (resource_path(name), resource_path("packaging") / name):
+            if candidate.exists():
+                return candidate
     return None
 
 

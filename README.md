@@ -36,7 +36,9 @@ ei tästä lähdekoodista – ks. [Asennus](#asennus).
 > `.sha256`-tiedostot ja *Source code* -paketit voi jättää huomiotta.
 
 Sovellus tarvitsee koneelta Google Chromen. Kaikki muu (Python, Playwright-ajuri, fontit)
-tulee paketin mukana. Asennus ei vaadi järjestelmänvalvojan oikeuksia.
+tulee paketin mukana. Asennus ei vaadi järjestelmänvalvojan oikeuksia. Jos Windowsin Defender
+pysäyttää asennuksen, sovelluksen salliminen Defenderissä voi kysyä niitä (ks. [Defender
+pysäyttää asennuksen](#defender-pysäyttää-asennuksen)).
 
 ### macOS
 
@@ -60,12 +62,39 @@ Asetukset ja Excel-pohja kopioidaan ensimmäisellä käynnistyksellä kansioon
 1. Pura ladattu `.zip` kansioon, joka jää pysyvästi paikalleen, esimerkiksi
    `C:\Ohjelmat\OpintosuunnitelmanTayttaja\` (hiiren oikea → *Pura kaikki…*). Älä käynnistä
    ohjelmaa suoraan zip-paketin sisältä.
-2. Käynnistä `OpintosuunnitelmanTayttaja.exe`.
+2. Käynnistä `OpintosuunnitelmanTayttaja.exe`. Jos sininen *Windows suojasi tietokonettasi*
+   -ikkuna avautuu, paina **Lisätietoja** → **Suorita silti**.
+   **Jos Defender pysäyttää purkamisen tai käynnistyksen**, salli sovellus Defenderissä:
+   ks. [Defender pysäyttää asennuksen](#defender-pysäyttää-asennuksen).
 3. Pikakuvake: hiiren oikea exe-tiedostoon → *Näytä lisää vaihtoehtoja* → *Lähetä kohteeseen* →
    *Työpöytä (luo pikakuvake)*, tai kiinnitä käynnissä oleva sovellus tehtäväpalkkiin.
 
 Asetukset ja Excel-pohja kopioidaan ensimmäisellä käynnistyksellä kansioon
 `%APPDATA%\OpintosuunnitelmanTayttaja\` (Tiedosto → *Avaa asetuskansio*).
+
+#### Defender pysäyttää asennuksen
+
+Joillakin koneilla Microsoft Defender tulkitsee sovelluksen virheellisesti uhaksi, kun zip
+puretaan tai `OpintosuunnitelmanTayttaja.exe` käynnistetään ensimmäisen kerran. Merkkejä:
+ilmoitus *Uhka löytynyt*, purkaminen keskeytyy virheeseen tai exe katoaa kansiosta. Kyse on
+väärästä hälytyksestä: sovellus on PyInstallerilla koottu Python-ohjelma ilman
+koodiallekirjoitusta, ja sellaiset saavat usein yleisnimisen tunnisteen (esimerkiksi
+`Trojan:Win32/Wacatac`). Ratkaisu on sallia sovellus Defenderissä; muuta ei tarvita.
+
+1. Avaa **Windowsin suojaus** (Käynnistä → kirjoita *Windowsin suojaus*).
+2. Valitse **Virusten ja uhkien torjunta** → **Suojaushistoria**.
+3. Avaa uusin ilmoitus, jossa mainitaan `OpintosuunnitelmanTayttaja`. Windows voi kysyä
+   järjestelmänvalvojan hyväksyntää ennen kuin näyttää tiedot.
+4. Valitse **Toiminnot** → **Salli laitteessa**. Jos tiedosto on jo *asetettu karanteeniin*
+   ja tarjolla on vain **Palauta**, valitse se: Defender huomaa palautetun tiedoston uudelleen
+   ja tekee uuden *Uhka löytynyt – toimia tarvitaan* -ilmoituksen, josta valitaan
+   **Salli laitteessa**.
+5. Pura zip uudelleen, jos purkaminen keskeytyi, ja käynnistä `OpintosuunnitelmanTayttaja.exe`.
+
+Jos hälytys tulee taas päivityksen jälkeen, toista vaiheet. Sallimisen voi perua samalta
+*Virusten ja uhkien torjunta* -sivulta kohdasta *Sallitut uhat*. Työkoneella, jolla
+*Salli laitteessa* puuttuu tai Windows ei hyväksy omia tunnuksiasi, salliminen kuuluu IT:lle
+(ks. *Työpaikan hallinnoitu kone* alla).
 
 #### SmartScreen ja Defender Windows 11:ssä
 
@@ -87,13 +116,11 @@ ladatuksi. Hiiren oikea `OpintosuunnitelmanTayttaja.exe` → **Ominaisuudet** �
 **Poista esto** → *OK*. Sama voi koskea koko purettua kansiota: tee tämä alkuperäiselle
 zip-tiedostolle ennen purkamista, niin merkintä ei periydy tiedostoihin.
 
-**Defender ilmoittaa uhasta tai poistaa tiedoston.** Pakattu Python-sovellus laukaisee joskus
-väärän hälytyksen (tyypillisesti `Trojan:Win32/Wacatac` tai `Program:Win32/...`). Palauta se:
-**Windowsin suojaus** (Käynnistä → kirjoita *Windowsin suojaus*) → **Virusten ja uhkien
-torjunta** → **Suojaushistoria** → avaa ilmoitus → *Toiminnot* → **Palauta** tai **Salli
-laitteessa**. Jotta sama ei toistu päivityksissä, lisää asennuskansio poikkeuksiin: *Virusten ja
-uhkien torjunta* → *Virusten ja uhkien torjunnan asetukset* → **Hallitse asetuksia** → rullaa
-kohtaan **Poikkeukset** → *Lisää tai poista poikkeuksia* → **Lisää poikkeus → Kansio** → valitse
+**Defender ilmoittaa uhasta tai poistaa tiedoston.** Salli sovellus Defenderissä: ks.
+[Defender pysäyttää asennuksen](#defender-pysäyttää-asennuksen) yllä. Jos hälytys toistuu
+jokaisen päivityksen jälkeen, asennuskansion voi lisätä poikkeuksiin: *Virusten ja uhkien
+torjunta* → *Virusten ja uhkien torjunnan asetukset* → **Hallitse asetuksia** → rullaa kohtaan
+**Poikkeukset** → *Lisää tai poista poikkeuksia* → **Lisää poikkeus → Kansio** → valitse
 `C:\Ohjelmat\OpintosuunnitelmanTayttaja`. Poikkeuksen lisääminen vaatii järjestelmänvalvojan
 oikeudet.
 
@@ -185,7 +212,8 @@ git push origin v2.5.3
 
 ## Käyttö ikkunassa
 
-Ikkuna kulkee viidessä vaiheessa:
+Ikkuna kulkee viidessä vaiheessa. Ensimmäisellä käynnistyksellä se avautuu suurennettuna, ja
+sen jälkeen se muistaa kokonsa ja paikkansa.
 
 1. **Käynnistä Chrome.** Nappi avaa Chromen erilliseen profiiliin, johon Wilma-kirjautuminen
    säilyy kertojen välillä. Tila näkyy tekstinä ("Yhteys kunnossa · portti 9222").
@@ -202,23 +230,34 @@ Ikkuna kulkee viidessä vaiheessa:
    riittää pääsuuntaus Excelistä; vanhalle haetaan Wilman rivit, lisätään Excelistä puuttuvat
    ja täytetään korvaustilassa.
 4. **Esikatselu ja muokkaus.** Taulukko näyttää täsmälleen ne rivit, jotka lomakkeelle menevät.
+   **Laajenna koko ruutuun** (kohdan otsikkorivillä) näyttää esikatselun ja muokkauksen koko
+   näytön kokoisena; muut vaiheet ja otsikko piiloutuvat. *Pienennä* tai **Esc** palauttaa
+   ikkunan ennalleen. Pitkä teksti rivittyy soluun (enintään kolme riviä, koko teksti näkyy
+   työkaluvihjeessä).
    Taulukon alla ovat napit **+ Uusi rivi**, joka lisää tyhjän rivin (lähde *Oma rivi*) valitun
    rivin alle tai loppuun, ja **Aseta ajankohta valituille**, joka kirjoittaa saman ajankohdan
-   rastitetuille. Solut kirjoitetaan kaksoisnapsauttamalla. Jokaisen solun voi muokata, rivin
-   rastin voi poistaa, otsikkorivin rasti valitsee tai poistaa kaikki. Rivin järjestystä vaihdetaan raahaamalla rivin alussa olevasta
-   tarttumasta ⋮⋮ (tai ▲▼-linkeillä), ja rivin oikean laidan roskakori poistaa rivin
+   rastitetuille. Solua muokataan kaksoisnapsauttamalla tai napsauttamalla valitun rivin solua:
+   muokkauskenttä rivittää tekstin ja kasvaa kirjoitettaessa, **Enter** tallentaa, **Esc** peruu
+   ja **Tab** siirtyy seuraavaan soluun. Rivin rastin voi poistaa, otsikkorivin rasti valitsee
+   tai poistaa kaikki. Rivin järjestystä vaihdetaan raahaamalla rivin alussa olevasta
+   tarttumasta ⋮⋮: paksu viiva näyttää, mihin rivi putoaa, ja taulukko vierii, kun raahaat
+   reunan lähelle. Vaihtoehtoisesti valitse rivi napsauttamalla (valittu rivi näkyy
+   burgundisella reunuksella ja vasemman laidan palkilla) ja käytä nappeja **▲ Ylös** ja
+   **▼ Alas** tai näppäimiä Alt+↑ / Alt+↓ (Macilla Option). Napit ovat himmeinä, kun mitään
+   riviä ei ole valittu. Rivin oikean laidan roskakori poistaa rivin
    esikatselusta (*Palauta poistetut* tuo ne takaisin). Tyhjät välirivit lähteiden välissä
    näkyvät omina riveinään lähteenä *Välirivi*, samoin Wilman lomakkeen tyhjät rivit, joten
    taulukko vastaa rivi riviltä sitä, mitä lomakkeelle kirjoitetaan. Näin opiskelijan
    olemassa olevaa suunnitelmaa voi järjestellä, muokata ja täydentää Excelin riveillä ilman
    Wilman käsityötä.
 
-   ![Esikatselu muokattuna](docs/kuvat/02-esikatselu-muokattu.png)
+   ![Esikatselu koko ruudun kokoisena: valittu rivi ja kasvava muokkauskenttä](docs/kuvat/02-esikatselu-muokattu.png)
 
 5. **Täyttö.** Valitse täyttötapa: *Lisää lomakkeen loppuun*, *Korvaa lomakkeen nykyiset
    rivit* (oletus, kun rivit on haettu Wilmasta) tai *Täydennä puuttuvat* (ks.
    [Täyttötapa](#täyttötapa)). Valinta muistetaan seuraavaan kertaan. Paina **Täytä lomake**.
-   Eteneminen ja loki näkyvät ikkunassa; *Keskeytä* pysäyttää rivin jälkeen.
+   Eteneminen ja loki tulevat näkyviin täytön alkaessa (tai jos lokiin tulee varoitus);
+   *Keskeytä* pysäyttää rivin jälkeen.
 
    ![Täyttö käynnissä](docs/kuvat/03-taytto.png)
 
@@ -288,7 +327,11 @@ Tekstin, kohdekentän ja oletusvastauksen voi muuttaa samassa välilehdessä (`c
 Ulkoasu noudattaa BC Helsingin design systemiä (`gui/theme.py`): pergamentti- ja burgunditokenit,
 Public Sans ja Source Serif 4 (OFL-lisenssi, fontit pakataan mukaan), ei varjoja, ei
 kulmapyöristyksiä, ei ikoneita; erottimina keskipiste, numerot ja hairline-viivat.
-Kuvakevaihtoehdot ovat kansiossa `packaging/icon-variants/`.
+Sovelluskuvake *Raahattava rivi* (taulukon rivit, joista kultainen siirtyy) tehdään skriptillä
+`.venv/bin/python -I scripts/make-icons.py`: se piirtää `packaging/icon.png` (1024 px),
+`icon.icns` (macOS, vain macOS:llä) ja `icon.ico` (Windows, 16–256 px) suoraan vektorista,
+jolloin 16–48 px:n koot ovat teräviä. Luonnokset ja vertailu ovat kansiossa
+`packaging/icon-variants/2026-10-luonnokset/`, vanhemmat vaihtoehdot `packaging/icon-variants/`.
 
 ## Komentorivi tarkemmin
 

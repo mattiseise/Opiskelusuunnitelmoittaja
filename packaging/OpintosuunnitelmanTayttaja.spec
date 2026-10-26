@@ -12,8 +12,10 @@ import playwright
 
 ROOT = Path(SPECPATH).parent
 DRIVER_DIR = Path(playwright.__file__).parent / "driver"
-# PyInstaller muuntaa PNG:n .icns/.ico-muotoon Pillow'lla; Windowsissa käytetään valmista .ico:ta.
-ICON = str(ROOT / "packaging" / ("icon.ico" if sys.platform == "win32" else "icon.png"))
+# Valmiit monikokoiset kuvakkeet (scripts/make-icons.py): pienet koot on piirretty erikseen
+# teräviksi, joten PyInstallerin ei tarvitse pienentää 1024 px:n PNG:tä.
+_ICON_FILE = {"win32": "icon.ico", "darwin": "icon.icns"}.get(sys.platform, "icon.png")
+ICON = str(ROOT / "packaging" / _ICON_FILE)
 
 # Playwrightin Node-ajuri ja JS-paketti mukaan samaan suhteelliseen paikkaan, josta
 # playwright.__file__ sen odottaa löytävän (<_MEIPASS>/playwright/driver).
@@ -27,6 +29,7 @@ datas = [
     (str(ROOT / "config.json"), "."),
     (str(ROOT / "Opintosuunnitelmat.xlsx"), "."),
     (str(ROOT / "packaging" / "icon.png"), "."),
+    (str(ROOT / "packaging" / "icon.ico"), "."),  # Windowsin ikkunakuvake (gui/app.py)
     # Public Sans + Source Serif 4 (OFL) samaan paikkaan, josta gui/theme.py ne lataa
     (str(ROOT / "src" / "opiskelusuunnitelmoittaja" / "gui" / "fonts"), "opiskelusuunnitelmoittaja/gui/fonts"),
 ]
@@ -85,8 +88,8 @@ if sys.platform == "darwin":
         icon=ICON,
         bundle_identifier="fi.seise.opintosuunnitelmantayttaja",
         info_plist={
-            "CFBundleShortVersionString": "2.5.5",
-            "CFBundleVersion": "2.5.5",
+            "CFBundleShortVersionString": "2.6.0",
+            "CFBundleVersion": "2.6.0",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
             "NSHumanReadableCopyright": "Matti Seise",

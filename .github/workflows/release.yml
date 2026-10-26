@@ -87,6 +87,10 @@ jobs:
 
             **Windows:** pura `.zip` pysyvään kansioon ja käynnistä `OpintosuunnitelmanTayttaja.exe`.
             SmartScreen varoittaa tuntemattomasta julkaisijasta → *Lisätietoja* → *Suorita silti*.
+            Jos Defender pysäyttää purkamisen tai käynnistyksen (väärä hälytys), salli sovellus:
+            *Windowsin suojaus* → *Virusten ja uhkien torjunta* → *Suojaushistoria* → avaa ilmoitus →
+            *Toiminnot* → *Salli laitteessa*, ja pura zip tarvittaessa uudelleen. Tarkemmin:
+            [README → Defender pysäyttää asennuksen](https://github.com/mattiseise/Opiskelusuunnitelmoittaja#defender-pysäyttää-asennuksen).
             Selaimen latausvaroitus, Defenderin väärä hälytys ja muut Windows 11 -tilanteet:
             [README → SmartScreen ja Defender](https://github.com/mattiseise/Opiskelusuunnitelmoittaja#smartscreen-ja-defender-windows-11ssä).
 

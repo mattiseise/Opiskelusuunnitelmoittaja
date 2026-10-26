@@ -657,3 +657,134 @@ def test_wilma_load_clears_manual_sheet_selection(qtbot, config_path: Path) -> N
     assert win.selected_sheet_names() == []
     assert win.manual_list.item(0).checkState() == Qt.CheckState.Unchecked
     assert win.mode_replace.isChecked()
+
+
+def test_field_editor_grows_and_enter_commits_single_line(qtbot, config_path: Path) -> None:
+    from PySide6.QtWidgets import QAbstractItemView, QTextEdit
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.show()
+    win.separator_check.setChecked(False)
+    row_height = win.preview.rowHeight(0)
+    item = win.preview.item(0, 5)
+    assert item is not None
+    win.preview.setCurrentItem(item)
+    win.preview.editItem(item)
+    editor = win.preview.findChild(QTextEdit)
+    assert editor is not None and editor.isVisible()
+    assert editor.textCursor().position() == len(item.text())  # kursori loppuun, ei korvausta
+
+    # QTest.keyClicks hyväksyy vain ASCII-merkit (ääkköset kaatavat qasciikey-assertiin)
+    qtbot.keyClicks(editor, " ja pitka lisays, joka ei mahdu yhdelle riville kapeassa solussa" * 3)
+    assert editor.height() > row_height  # muokkain kasvaa tekstin mukana
+
+    qtbot.keyClick(editor, Qt.Key.Key_Return)
+    assert win.preview.state() != QAbstractItemView.State.EditingState
+    text = win.preview.item(0, 5).text()  # type: ignore[union-attr]
+    assert "\n" not in text and text.endswith("kapeassa solussa")
+    assert win._preview_rows[0].values["suoritustapa"] == text
+    assert win.preview.item(0, 5).toolTip() == text  # type: ignore[union-attr]
+    assert win.preview.rowHeight(0) > row_height  # pitkä teksti rivittyy, rivi kasvaa
+
+
+def test_drop_gap_and_move_to_gap(qtbot, config_path: Path) -> None:
+    from PySide6.QtCore import QPoint
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.show()
+    table = win.preview
+    assert [table.item(r, 3).text() for r in range(2)] == ["Ohjelmointi", "Tietoturva"]  # type: ignore[union-attr]
+    top = table.rowViewportPosition(1)
+    assert table.drop_gap_at(QPoint(50, top + 2)) == 1  # rivin yläpuolisko: yläpuolelle
+    assert table.drop_gap_at(QPoint(50, top + table.rowHeight(1) - 2)) == 2  # alapuolisko
+    assert table.drop_gap_at(QPoint(50, table.viewport().height() - 1)) == 2  # tyhjä: loppuun
+
+    table.move_to_gap(0, 2)  # ensimmäinen rivi loppuun
+    assert [table.item(r, 3).text() for r in range(2)] == ["Tietoturva", "Ohjelmointi"]  # type: ignore[union-attr]
+    table.move_to_gap(1, 1)  # oma paikka: ei muutosta
+    assert table.item(1, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+
+
+def test_alt_arrow_moves_selected_row(qtbot, config_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.show()
+    win.activateWindow()
+    qtbot.waitActive(win)  # pikanäppäin toimii vain aktiivisessa ikkunassa
+    win.preview.selectRow(0)
+    win.preview.setFocus()
+    qtbot.waitUntil(win.preview.hasFocus)
+    qtbot.keyClick(win.preview, Qt.Key.Key_Down, Qt.KeyboardModifier.AltModifier)
+    assert [win.preview.item(r, 3).text() for r in range(2)] == ["Tietoturva", "Ohjelmointi"]  # type: ignore[union-attr]
+    assert win.preview.currentRow() == 1
+    qtbot.keyClick(win.preview, Qt.Key.Key_Up, Qt.KeyboardModifier.AltModifier)
+    assert win.preview.item(0, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+
+
+def test_expand_preview_full_screen_and_escape_restores(qtbot, config_path: Path) -> None:
+    from opiskelusuunnitelmoittaja.gui.main_window import COLLAPSED_TEXT, EXPAND_TEXT
+
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.setWindowState(Qt.WindowState.WindowNoState)
+    win.show()
+    win.activateWindow()
+    qtbot.waitActive(win)
+    assert win.btn_expand.text() == EXPAND_TEXT
+
+    win.btn_expand.click()
+    assert win.isFullScreen()
+    hidden = (win.header_band, win.left_scroll, win.left_divider, win.fill_section)
+    assert not any(w.isVisible() for w in hidden)
+    assert win.preview.isVisible() and win.btn_add_row.isVisible()
+    assert win.btn_expand.text() == COLLAPSED_TEXT
+
+    win.preview.setFocus()
+    qtbot.waitUntil(win.preview.hasFocus)
+    qtbot.keyClick(win.preview, Qt.Key.Key_Escape)  # Esc taulukosta pienentää
+    assert not win.isFullScreen()
+    assert all(w.isVisible() for w in hidden)
+    assert win.btn_expand.text() == EXPAND_TEXT
+
+
+def test_move_buttons_follow_selection(qtbot, config_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.show()
+    assert win.preview.rowCount() == 2
+    assert not win.btn_up.isEnabled() and not win.btn_down.isEnabled()  # ei valintaa
+    win.move_current_row(1)  # ei valittua riviä: ei siirretä mitään
+    assert win.preview.item(0, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+
+    win.preview.selectRow(0)
+    assert not win.btn_up.isEnabled() and win.btn_down.isEnabled()
+    win.btn_down.click()
+    assert win.preview.item(1, 3).text() == "Ohjelmointi"  # type: ignore[union-attr]
+    assert win.selected_row() == 1  # valinta seuraa siirrettyä riviä
+    assert win.btn_up.isEnabled() and not win.btn_down.isEnabled()
+
+    win.update_preview()  # uudelleenpiirto tyhjentää valinnan
+    assert not win.btn_up.isEnabled() and not win.btn_down.isEnabled()
+
+
+def test_fill_output_hidden_until_needed_and_geometry_saved(qtbot, config_path: Path) -> None:
+    win = MainWindow(config_path)
+    qtbot.addWidget(win)
+    win.show()
+    # Testin Rikki-välilehti kirjaa virheen jo käynnistyksessä, joten loki on näkyvissä
+    assert win.fill_output.isVisible()
+    win.fill_output.setVisible(False)
+    win.append_log("INFO", "tavallinen viesti")
+    assert not win.fill_output.isVisible()  # pelkkä INFO ei vie tilaa taulukolta
+    win.append_log("WARNING", "huomio")
+    assert win.fill_output.isVisible()
+    win.fill_output.setVisible(False)
+    win._set_running(True)
+    assert win.fill_output.isVisible()
+    win._set_running(False)
+
+    win.close()
+    saved = win.settings.value("window_geometry")
+    assert saved is not None and not saved.isEmpty()

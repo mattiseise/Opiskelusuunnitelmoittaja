@@ -9,8 +9,17 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QTimer, Slot
-from PySide6.QtGui import QAction, QCloseEvent, QColor
+from PySide6.QtCore import QByteArray, QEvent, QSettings, Qt, QTimer, Slot
+from PySide6.QtGui import (
+    QAction,
+    QCloseEvent,
+    QColor,
+    QGuiApplication,
+    QKeyEvent,
+    QKeySequence,
+    QShortcut,
+    QWindowStateChangeEvent,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -47,7 +56,7 @@ from ..fillmode import FillMode
 from ..logsetup import setup_logging
 from ..update import UpdateCheck
 from . import theme
-from .preview_table import GRIP, GripDelegate, PreviewTable, TrashDelegate
+from .preview_table import GRIP, FieldDelegate, GripDelegate, PreviewTable, TrashDelegate
 from .settings_dialog import SettingsDialog
 from .update_panel import AVAILABLE_TEXT, UpdateWorker
 from .worker import FillWorker, ProbeWorker, QtLogHandler, ReadWorker
@@ -62,6 +71,8 @@ CHECK_COL = 1
 SOURCE_COL = 2
 FIELD_COLUMN_OFFSET = 3  # 3…6 = kentät
 DELETE_COL = 7  # roskakori: poista rivi esikatselusta
+EXPAND_TEXT = "Laajenna koko ruutuun"  # esikatselu ja muokkaus koko näytölle
+COLLAPSED_TEXT = "Pienennä (Esc)"
 
 
 @dataclass
@@ -110,9 +121,13 @@ class MainWindow(QMainWindow):
         self.rb_no_main: QRadioButton | None = None  # "Ei pääsuuntausta Excelistä"
         self.update_check: UpdateCheck | None = None
         self._update_worker: UpdateWorker | None = None
+        # "Laajenna koko ruutuun": ikkunan tila ja koko ennen laajennusta palautusta varten
+        self._preview_expanded = False
+        self._state_before_expand = Qt.WindowState.WindowNoState
+        self._geometry_before_expand: QByteArray | None = None
 
         self.setWindowTitle(APP_TITLE)
-        self.resize(1180, 820)
+        self._restore_geometry()
 
         self._build_menu()
         self._build_ui()
@@ -163,7 +178,7 @@ class MainWindow(QMainWindow):
         outer.setSpacing(0)
 
         # --- otsikkovyö (burgundi section)
-        header = QWidget()
+        self.header_band = header = QWidget()
         header.setProperty("role", "section")
         header.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         h = QHBoxLayout(header)
@@ -213,25 +228,25 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 24, 0)
         left_layout.setSpacing(0)
-        left_scroll = QScrollArea()
-        left_scroll.setWidget(left)
-        left_scroll.setWidgetResizable(True)
-        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        left_scroll.setFixedWidth(420)
-        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        left_scroll.setStyleSheet(
+        self.left_scroll = QScrollArea()
+        self.left_scroll.setWidget(left)
+        self.left_scroll.setWidgetResizable(True)
+        self.left_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.left_scroll.setFixedWidth(420)
+        self.left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.left_scroll.setStyleSheet(
             "QScrollArea { background: transparent; } "
             "QScrollArea > QWidget > QWidget { background: transparent; }"
         )
-        body.addWidget(left_scroll)
+        body.addWidget(self.left_scroll)
 
-        vline = QFrame()
-        vline.setProperty("role", "vhairline")
-        vline.setFrameShape(QFrame.Shape.NoFrame)
-        body.addWidget(vline)
+        self.left_divider = QFrame()
+        self.left_divider.setProperty("role", "vhairline")
+        self.left_divider.setFrameShape(QFrame.Shape.NoFrame)
+        body.addWidget(self.left_divider)
 
         right = QWidget()
-        right_layout = QVBoxLayout(right)
+        self.right_layout = right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(32, 0, 0, 0)
         right_layout.setSpacing(0)
         body.addWidget(right, 1)
@@ -289,9 +304,9 @@ class MainWindow(QMainWindow):
         wilma_title.setContentsMargins(0, 0, 0, 2)
         left_layout.addWidget(wilma_title)
         wilma_caps = QHBoxLayout()
-        wilma_caps.setSpacing(6)
+        wilma_caps.setSpacing(8)
+        wilma_caps.setContentsMargins(0, 4, 0, 0)
         self.btn_read_wilma = QPushButton("Hae nykyiset rivit Wilmasta")
-        self.btn_read_wilma.setProperty("variant", "link")
         self.btn_read_wilma.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_read_wilma.setToolTip(
             "Lukee kohdassa 2 avatun opintosuunnitelmalomakkeen rivit esikatseluun, jossa niitä "
@@ -299,10 +314,7 @@ class MainWindow(QMainWindow):
         )
         self.btn_read_wilma.clicked.connect(self.read_from_wilma)
         wilma_caps.addWidget(self.btn_read_wilma)
-        self.wilma_dot = _label("·", "muted")
-        wilma_caps.addWidget(self.wilma_dot)
         self.btn_clear_wilma = QPushButton("Poista")
-        self.btn_clear_wilma.setProperty("variant", "link")
         self.btn_clear_wilma.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clear_wilma.setToolTip("Poista Wilmasta haetut rivit esikatselusta")
         self.btn_clear_wilma.clicked.connect(self.clear_wilma_rows)
@@ -311,7 +323,7 @@ class MainWindow(QMainWindow):
         left_layout.addLayout(wilma_caps)
         self.wilma_status = _label("", "muted")
         self.wilma_status.setWordWrap(True)
-        self.wilma_status.setContentsMargins(0, 4, 0, 0)
+        self.wilma_status.setContentsMargins(0, 6, 0, 0)
         left_layout.addWidget(self.wilma_status)
         self._refresh_wilma_status()
         left_layout.addWidget(_hairline(top=12, bottom=10))
@@ -321,24 +333,22 @@ class MainWindow(QMainWindow):
         excel_title.setContentsMargins(0, 0, 0, 2)
         left_layout.addWidget(excel_title)
         excel_caps = QHBoxLayout()
-        excel_caps.setSpacing(6)
+        excel_caps.setSpacing(8)
+        excel_caps.setContentsMargins(0, 4, 0, 8)
         self.btn_open_excel = QPushButton("Avaa Excel")
-        self.btn_open_excel.setProperty("variant", "link")
         self.btn_open_excel.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_open_excel.setToolTip("Avaa lähde-Excel Excelissä (tai oletusohjelmassa)")
         self.btn_open_excel.clicked.connect(self.open_excel)
         excel_caps.addWidget(self.btn_open_excel)
-        excel_caps.addWidget(_label("·", "muted"))
-        btn_browse = QPushButton("Vaihda")
-        btn_browse.setProperty("variant", "link")
+        btn_browse = QPushButton("Vaihda…")
         btn_browse.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_browse.setToolTip("Valitse toinen Excel-tiedosto")
         btn_browse.clicked.connect(self.choose_excel)
         btn_reload = QPushButton("Lataa uudelleen")
-        btn_reload.setProperty("variant", "link")
         btn_reload.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_reload.setToolTip("Lue Excel uudelleen, kun olet tallentanut muutokset Excelissä")
         btn_reload.clicked.connect(self.reload_excel)
         excel_caps.addWidget(btn_browse)
-        excel_caps.addWidget(_label("·", "muted"))
         excel_caps.addWidget(btn_reload)
         excel_caps.addStretch()
         left_layout.addLayout(excel_caps)
@@ -422,48 +432,27 @@ class MainWindow(QMainWindow):
 
         # 4 · Esikatselu ja muokkaus
         step4 = self._step_header("4", "Esikatselu ja muokkaus")
-        # + Uusi rivi ja Aseta ajankohta ovat nappeina taulukon alla (lisätään layoutiin
-        # esikatselun jälkeen); tässä vain luodaan ne.
-        self.btn_add_row = QPushButton("+ Uusi rivi")
-        self.btn_add_row.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_add_row.setToolTip(
-            "Lisää esikatseluun tyhjä rivi (lähde 'Oma rivi') valitun rivin alle, tai loppuun. "
-            "Kirjoita solut kaksoisnapsauttamalla."
-        )
-        self.btn_add_row.clicked.connect(self.add_manual_row)
-        self.btn_set_time = QPushButton("Aseta ajankohta valituille")
-        self.btn_set_time.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_set_time.setToolTip(
-            "Kirjoittaa saman suoritusajankohdan kaikille rastitetuille riveille. "
-            "Solua voi muokata myös kaksoisnapsauttamalla."
-        )
-        self.btn_set_time.clicked.connect(self.set_time_for_checked)
-        self.btn_up = QPushButton("▲")
-        self.btn_up.setProperty("variant", "link")
-        self.btn_up.setToolTip("Siirrä valittu rivi ylös")
-        self.btn_up.clicked.connect(lambda: self.move_current_row(-1))
-        self.btn_down = QPushButton("▼")
-        self.btn_down.setProperty("variant", "link")
-        self.btn_down.setToolTip("Siirrä valittu rivi alas")
-        self.btn_down.clicked.connect(lambda: self.move_current_row(1))
-        step4.addWidget(self.btn_up)
-        step4.addWidget(self.btn_down)
-        self.restore_dot = _label("·", "muted")
-        step4.addWidget(self.restore_dot)
-        self.btn_restore = QPushButton("Palauta poistetut")
-        self.btn_restore.setProperty("variant", "link")
-        self.btn_restore.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_restore.setToolTip("Palauta roskakorilla poistetut rivit esikatseluun")
-        self.btn_restore.clicked.connect(self.restore_deleted_rows)
-        step4.addWidget(self.btn_restore)
-        self.restore_dot.setVisible(False)
-        self.btn_restore.setVisible(False)
-        step4.addStretch()
         self.preview_label = _label("", "caps")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
         step4.addWidget(self.preview_label)
+        step4.addSpacing(16)
+        self.btn_expand = QPushButton(EXPAND_TEXT)
+        self.btn_expand.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_expand.setToolTip(
+            "Näytä esikatselu ja muokkaus koko ruudun kokoisena. Esc tai sama nappi palauttaa."
+        )
+        self.btn_expand.clicked.connect(
+            lambda: self.set_preview_expanded(not self._preview_expanded)
+        )
+        step4.addWidget(self.btn_expand, 0, Qt.AlignmentFlag.AlignBottom)
         right_layout.addLayout(step4)
-        self.preview = PreviewTable(0, 8)
+        self.preview = PreviewTable(
+            0,
+            8,
+            grip_column=GRIP_COL,
+            delete_column=DELETE_COL,
+            indicator_color=theme.TOKENS["brand"],
+        )
         self.preview.setHorizontalHeaderLabels(
             ["", "", "Lähde", "Osaamistavoite", "Laajuus", "Suoritustapa", "Ajankohta", ""]
         )
@@ -471,7 +460,7 @@ class MainWindow(QMainWindow):
         self.preview.cellClicked.connect(self._on_preview_cell_clicked)
         hh = self.preview.horizontalHeader()
         hh.setSectionResizeMode(GRIP_COL, QHeaderView.ResizeMode.Fixed)
-        hh.resizeSection(GRIP_COL, 28)
+        hh.resizeSection(GRIP_COL, 36)
         self.preview.setItemDelegateForColumn(
             GRIP_COL, GripDelegate(theme.TOKENS["gold"], self.preview)
         )
@@ -483,10 +472,13 @@ class MainWindow(QMainWindow):
         hh.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
         hh.setSectionResizeMode(DELETE_COL, QHeaderView.ResizeMode.Fixed)
-        hh.resizeSection(DELETE_COL, 36)
+        hh.resizeSection(DELETE_COL, 40)
         self.preview.setItemDelegateForColumn(
             DELETE_COL, TrashDelegate(theme.TOKENS["ink_soft"], self.preview)
         )
+        self.field_delegate = FieldDelegate(self.preview)
+        for col in range(FIELD_COLUMN_OFFSET, DELETE_COL):
+            self.preview.setItemDelegateForColumn(col, self.field_delegate)
         hh.setMinimumSectionSize(28)
         self.preview.itemChanged.connect(self._on_preview_item_changed)
         # "Valitse kaikki / poista valinnat" -rasti otsikkorivin tyhjässä solussa
@@ -501,9 +493,11 @@ class MainWindow(QMainWindow):
         self._place_header_check()
         hh.setHighlightSections(False)
         self.preview.setFont(theme.sans(13))
-        # Kaikki kenttäsolut ovat muokattavia; rasti- ja lähdesolut eivät
+        # Kaikki kenttäsolut ovat muokattavia; rasti- ja lähdesolut eivät. Valitun rivin
+        # solua napsauttamalla pääsee muokkaamaan ilman kaksoisnapsautusta.
         self.preview.setEditTriggers(
             QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.SelectedClicked
             | QAbstractItemView.EditTrigger.EditKeyPressed
             | QAbstractItemView.EditTrigger.AnyKeyPressed
         )
@@ -511,23 +505,85 @@ class MainWindow(QMainWindow):
         self.preview.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.preview.setShowGrid(False)
         self.preview.setAlternatingRowColors(True)
-        self.preview.verticalHeader().setVisible(False)
-        self.preview.verticalHeader().setDefaultSectionSize(34)
-        self.preview.setWordWrap(False)
-        right_layout.addWidget(self.preview, 6)
+        vh = self.preview.verticalHeader()
+        vh.setVisible(False)
+        # pitkä teksti rivittyy ja rivi kasvaa sisällön mukaan (enintään FieldDelegate.MAX_LINES)
+        self.preview.setWordWrap(True)
+        vh.setMinimumSectionSize(34)
+        vh.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.preview.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        right_layout.addWidget(self.preview, 1)
+
+        # Taulukon napit: lisäys, ajankohta, siirto ja poistettujen palautus
+        self.btn_add_row = QPushButton("+ Uusi rivi")
+        self.btn_add_row.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_add_row.setToolTip(
+            "Lisää esikatseluun tyhjä rivi (lähde 'Oma rivi') valitun rivin alle, tai loppuun."
+        )
+        self.btn_add_row.clicked.connect(self.add_manual_row)
+        self.btn_set_time = QPushButton("Aseta ajankohta valituille")
+        self.btn_set_time.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_set_time.setToolTip(
+            "Kirjoittaa saman suoritusajankohdan kaikille rastitetuille riveille."
+        )
+        self.btn_set_time.clicked.connect(self.set_time_for_checked)
+        up_keys = QKeySequence("Alt+Up")
+        down_keys = QKeySequence("Alt+Down")
+        self.btn_up = QPushButton("▲ Ylös")
+        self.btn_up.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_up.setToolTip(
+            f"Siirrä valittu rivi ylös ({up_keys.toString(QKeySequence.SequenceFormat.NativeText)})"
+        )
+        self.btn_up.clicked.connect(lambda: self.move_current_row(-1))
+        self.btn_up.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.btn_down = QPushButton("▼ Alas")
+        self.btn_down.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_down.setToolTip(
+            "Siirrä valittu rivi alas "
+            f"({down_keys.toString(QKeySequence.SequenceFormat.NativeText)})"
+        )
+        self.btn_down.clicked.connect(lambda: self.move_current_row(1))
+        self.btn_down.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.preview.itemSelectionChanged.connect(self._refresh_move_buttons)
+        # Pikanäppäimet toimivat, kun taulukko on kohdistettuna (ei muokkaimessa)
+        for keys, delta in ((up_keys, -1), (down_keys, 1)):
+            shortcut = QShortcut(keys, self.preview)
+            shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+            shortcut.activated.connect(lambda d=delta: self.move_current_row(d))
+        self.btn_restore = QPushButton("Palauta poistetut")
+        self.btn_restore.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_restore.setToolTip("Palauta roskakorilla poistetut rivit esikatseluun")
+        self.btn_restore.clicked.connect(self.restore_deleted_rows)
+        self.btn_restore.setVisible(False)
         table_actions = QHBoxLayout()
-        table_actions.setSpacing(12)
+        table_actions.setSpacing(8)
         table_actions.setContentsMargins(0, 10, 0, 0)
         table_actions.addWidget(self.btn_add_row)
         table_actions.addWidget(self.btn_set_time)
-        table_actions.addStretch()
+        table_actions.addSpacing(16)
+        table_actions.addWidget(self.btn_up)
+        table_actions.addWidget(self.btn_down)
+        table_actions.addSpacing(16)
+        table_actions.addWidget(self.btn_restore)
+        table_actions.addSpacing(16)
+        self.table_hint = _label(
+            "Raahaa riviä vasemman reunan pisteistä. Kaksoisnapsautus muokkaa solua; "
+            "Enter tallentaa, Esc peruu.",
+            "muted",
+        )
+        self.table_hint.setWordWrap(True)
+        table_actions.addWidget(self.table_hint, 1)
         right_layout.addLayout(table_actions)
 
-        right_layout.addWidget(_hairline(top=14, bottom=14))
+        # 5 · Täyttö (oma säiliö: koko ruudun esikatselu piilottaa sen)
+        self.fill_section = QWidget()
+        fill_layout = QVBoxLayout(self.fill_section)
+        fill_layout.setContentsMargins(0, 0, 0, 0)
+        fill_layout.setSpacing(0)
+        fill_layout.addWidget(_hairline(top=12, bottom=12))
 
-        # 5 · Täyttö
         step5 = self._step_header("5", "Täyttö")
-        right_layout.addLayout(step5)
+        fill_layout.addLayout(step5)
         mode_row = QHBoxLayout()
         mode_row.setSpacing(18)
         mode_row.setContentsMargins(0, 0, 0, 0)
@@ -556,45 +612,102 @@ class MainWindow(QMainWindow):
             "voi poistaa napilla, joten ylijäävät jäävät tyhjiksi."
         )
         mode_row.addStretch()
-        right_layout.addLayout(mode_row)
-        self.mode_hint = _label("", "muted")
-        self.mode_hint.setWordWrap(True)
-        self.mode_hint.setContentsMargins(0, 4, 0, 8)
-        right_layout.addWidget(self.mode_hint)
+        fill_layout.addLayout(mode_row)
         # oletusvalinta asetetaan reload_configissa (QSettings → config.fill_mode)
+        # Täytä-nappi ja valitun täyttötavan kuvaus samalla rivillä: tilaa jää taulukolle
         actions = QHBoxLayout()
         actions.setSpacing(12)
+        actions.setContentsMargins(0, 8, 0, 0)
         self.btn_fill = QPushButton("Täytä lomake")
         self.btn_fill.setProperty("variant", "primary")
         self.btn_fill.setDefault(True)
         self.btn_fill.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_fill.clicked.connect(self.start_fill)
-        actions.addWidget(self.btn_fill)
+        actions.addWidget(self.btn_fill, 0, Qt.AlignmentFlag.AlignTop)
         self.btn_stop = QPushButton("Keskeytä")
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self.stop_fill)
-        actions.addWidget(self.btn_stop)
+        actions.addWidget(self.btn_stop, 0, Qt.AlignmentFlag.AlignTop)
         actions.addSpacing(12)
+        self.mode_hint = _label("", "muted")
+        self.mode_hint.setWordWrap(True)
+        actions.addWidget(self.mode_hint, 1, Qt.AlignmentFlag.AlignVCenter)
+        fill_layout.addLayout(actions)
+        # Eteneminen ja loki näkyvät vasta, kun niissä on jotain (täyttö tai varoitus)
+        self.fill_output = QWidget()
+        out = QVBoxLayout(self.fill_output)
+        out.setContentsMargins(0, 10, 0, 0)
+        out.setSpacing(6)
         self.progress_label = _label("", "muted")
-        actions.addWidget(self.progress_label, 1)
-        right_layout.addLayout(actions)
+        out.addWidget(self.progress_label)
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         self.progress.setFixedHeight(6)
-        right_layout.addSpacing(10)
-        right_layout.addWidget(self.progress)
-        right_layout.addSpacing(10)
+        out.addWidget(self.progress)
         self.log_view = QPlainTextEdit()
         self.log_view.setProperty("role", "log")
         self.log_view.setReadOnly(True)
         self.log_view.setFrameShape(QFrame.Shape.NoFrame)
         self.log_view.setMaximumBlockCount(2000)
-        self.log_view.setMinimumHeight(80)
-        self.log_view.setMaximumHeight(170)
+        self.log_view.setMinimumHeight(70)
+        self.log_view.setMaximumHeight(140)
         self.log_view.setPlaceholderText("Täytön loki näkyy tässä.")
-        right_layout.addWidget(self.log_view, 1)
+        out.addWidget(self.log_view)
+        self.fill_output.setVisible(False)
+        fill_layout.addWidget(self.fill_output)
+        right_layout.addWidget(self.fill_section)
 
         self.statusBar().showMessage("Valmis")
+
+    def _restore_geometry(self) -> None:
+        """Ikkunan koko ja paikka edelliseltä kerralta; ensimmäisellä kerralla suurennettuna,
+        jotta esikatselutaulukolle jää tilaa."""
+        saved = self.settings.value("window_geometry")
+        if isinstance(saved, QByteArray) and not saved.isEmpty() and self.restoreGeometry(saved):
+            return
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            self.resize(min(1600, avail.width()), min(1040, avail.height()))
+        else:
+            self.resize(1280, 860)
+        self.setWindowState(Qt.WindowState.WindowMaximized)
+
+    def set_preview_expanded(self, expanded: bool) -> None:
+        """Esikatselu ja muokkaus koko ruudun kokoisena: muut vaiheet ja otsikkovyö piiloon ja
+        ikkuna koko näytölle. Pienennys palauttaa ikkunan entiseen tilaansa."""
+        if expanded == self._preview_expanded:
+            return
+        self._preview_expanded = expanded
+        if expanded:
+            self._geometry_before_expand = self.saveGeometry()
+            self._state_before_expand = self.windowState()
+        for widget in (self.header_band, self.left_scroll, self.left_divider, self.fill_section):
+            widget.setVisible(not expanded)
+        self.right_layout.setContentsMargins(0 if expanded else 32, 0, 0, 0)
+        self.btn_expand.setText(COLLAPSED_TEXT if expanded else EXPAND_TEXT)
+        if expanded:
+            self.showFullScreen()
+        elif self.isFullScreen():
+            self.setWindowState(self._state_before_expand)
+
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        # Koko näytöltä poistuttiin käyttöjärjestelmän keinoin (vihreä nappi, ⌃⌘F):
+        # palautetaan myös asettelu, ettei ikkuna jää ilman vaiheita 1–3 ja 5
+        if (
+            isinstance(event, QWindowStateChangeEvent)
+            and self._preview_expanded
+            and event.oldState() & Qt.WindowState.WindowFullScreen
+            and not self.isFullScreen()
+        ):
+            QTimer.singleShot(0, lambda: self.set_preview_expanded(False))
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Escape and self._preview_expanded:
+            self.set_preview_expanded(False)
+            return
+        super().keyPressEvent(event)
 
     def _step_header(self, number: str, title: str) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -840,7 +953,6 @@ class MainWindow(QMainWindow):
     def _refresh_restore_link(self) -> None:
         visible = bool(self._deleted)
         self.btn_restore.setVisible(visible)
-        self.restore_dot.setVisible(visible)
         if visible:
             self.btn_restore.setText(f"Palauta poistetut ({len(self._deleted)})")
 
@@ -880,13 +992,14 @@ class MainWindow(QMainWindow):
                 item.setFlags(
                     item.flags() | Qt.ItemFlag.ItemIsEditable | Qt.ItemFlag.ItemIsDragEnabled
                 )
-                item.setToolTip("Kaksoisnapsauta muokataksesi")
+                item.setToolTip(item.text())  # koko teksti, jos solu on lyhennetty
                 self.preview.setItem(r, col, item)
             trash = QTableWidgetItem()
             trash.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
             trash.setToolTip("Poista rivi esikatselusta (ei täytetä lomakkeelle)")
             self.preview.setItem(r, DELETE_COL, trash)
         self.preview.blockSignals(False)
+        self._refresh_move_buttons()  # uudelleenpiirto tyhjentää valinnan signaaleitta
 
     def _on_preview_cell_clicked(self, r: int, col: int) -> None:
         if col == DELETE_COL:
@@ -933,7 +1046,8 @@ class MainWindow(QMainWindow):
             self.preview.setCurrentItem(first)
             self.preview.editItem(first)
         self.statusBar().showMessage(
-            "Uusi rivi lisätty. Kirjoita solut kaksoisnapsauttamalla.", 5000
+            "Uusi rivi lisätty. Kirjoita teksti ja paina Enter; Tab siirtyy seuraavaan soluun.",
+            5000,
         )
         return idx
 
@@ -998,9 +1112,22 @@ class MainWindow(QMainWindow):
         row.values[field] = value
         self._edits.setdefault(row.key, {})[field] = value
 
+    def selected_row(self) -> int:
+        """Valittu (korostettu) rivi tai -1. Eri asia kuin rastitetut rivit."""
+        sel = self.preview.selectionModel()
+        rows = sel.selectedRows() if sel is not None else []
+        return rows[0].row() if rows else -1
+
+    def _refresh_move_buttons(self) -> None:
+        """▲/▼ käytössä vain, kun rivi on valittuna ja sitä voi siirtää siihen suuntaan."""
+        r = self.selected_row()
+        self.btn_up.setEnabled(r > 0)
+        self.btn_down.setEnabled(0 <= r < self.preview.rowCount() - 1)
+
     def move_current_row(self, delta: int) -> None:
-        r = self.preview.currentRow()
-        self.move_row(r, r + delta)
+        r = self.selected_row()
+        if r >= 0:
+            self.move_row(r, r + delta)
 
     def move_row(self, src: int, dst: int) -> None:
         """Siirrä rivi paikasta src paikkaan dst (raahaus tai ▲▼)."""
@@ -1012,6 +1139,9 @@ class MainWindow(QMainWindow):
         self._order = [r.key for r in rows]
         self._render_preview()
         self.preview.selectRow(dst)
+        moved = self.preview.item(dst, FIELD_COLUMN_OFFSET)
+        if moved is not None:
+            self.preview.scrollToItem(moved)
         self._refresh_preview_summary()
 
     def read_from_wilma(self) -> None:
@@ -1082,7 +1212,6 @@ class MainWindow(QMainWindow):
                 "nykyistä suunnitelmaa voi muokata ja täydentää."
             )
         self.btn_clear_wilma.setVisible(n > 0)
-        self.wilma_dot.setVisible(n > 0)
 
     @Slot(str)
     def _on_wilma_failed(self, message: str) -> None:
@@ -1137,6 +1266,9 @@ class MainWindow(QMainWindow):
         field = self._field_for_column(item.column())
         if field is not None:
             self._record_edit(r, field, item.text().strip())
+            self.preview.blockSignals(True)
+            item.setToolTip(item.text())
+            self.preview.blockSignals(False)
 
     def _refresh_preview_summary(self, names: list[str] | None = None) -> None:
         names = self._preview_names if names is None else names
@@ -1358,6 +1490,8 @@ class MainWindow(QMainWindow):
         self.manual_list.setEnabled(not running)
         for rb in self.mode_buttons.values():
             rb.setEnabled(not running)
+        if running:
+            self.fill_output.setVisible(True)
         self.statusBar().showMessage("Täytetään…" if running else "Valmis")
 
     @Slot(int, int, str)
@@ -1412,6 +1546,7 @@ class MainWindow(QMainWindow):
     def append_log(self, level: str, message: str) -> None:
         color = LEVEL_COLORS.get(level)
         if color:
+            self.fill_output.setVisible(True)  # varoitukset näkyviin, vaikka täyttöä ei ole ajettu
             self.log_view.appendHtml(
                 f'<span style="color:{color}">{level}: {_escape(message)}</span>'
             )
@@ -1432,7 +1567,7 @@ class MainWindow(QMainWindow):
             "Tyhjä solu täytetään lomakkeelle välilyönnillä, koska Wilma ei hyväksy tyhjää "
             "kenttää.<br><br>"
             "Pääsuuntaukset ja kyllä/ei-kysymykset kytketään välilehtiin Asetukset → Kysely. "
-            "Toisen Excel-tiedoston voi valita <i>Vaihda</i>-linkistä; valinta muistetaan.",
+            "Toisen Excel-tiedoston voi valita <i>Vaihda</i>-napista; valinta muistetaan.",
         )
 
     def open_log_file(self) -> None:
@@ -1471,6 +1606,12 @@ class MainWindow(QMainWindow):
                 return
             self.worker.request_stop()
             self.worker.wait(5000)
+        geometry = (
+            self._geometry_before_expand
+            if self._preview_expanded and self._geometry_before_expand is not None
+            else self.saveGeometry()
+        )
+        self.settings.setValue("window_geometry", geometry)  # ei tallenneta koko ruudun tilaa
         logging.getLogger("suunnitelmoittaja").removeHandler(self.log_handler)
         event.accept()
 
