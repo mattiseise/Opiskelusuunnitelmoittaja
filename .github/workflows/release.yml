@@ -27,6 +27,25 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
 
+  launcher-windows:
+    # Kehitysversion Käynnistä-valikon pikakuvake ja tehtäväpalkin tunnus oikealla Windowsilla.
+    # Ei estä julkaisua (release tarvitsee vain buildin).
+    name: Windows-käynnistin (kehitysversio)
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Pikakuvake, kuvake ja AppUserModelID
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/make-launcher.ps1 -Destination "$env:RUNNER_TEMP\pikakuvake" -Verify
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prosessin AppUserModelID
+        run: uv run python -c "from opiskelusuunnitelmoittaja import APP_USER_MODEL_ID as want; from opiskelusuunnitelmoittaja.gui.app import set_windows_app_id as s; got = s(); print(got); assert got == want, got"
+
   build:
     name: Paketti ${{ matrix.label }}
     needs: test

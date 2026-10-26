@@ -12,6 +12,8 @@ import playwright
 
 ROOT = Path(SPECPATH).parent
 DRIVER_DIR = Path(playwright.__file__).parent / "driver"
+sys.path.insert(0, str(ROOT / "src"))
+from opiskelusuunnitelmoittaja import APP_SLUG, APP_TITLE, __version__  # noqa: E402
 # Valmiit monikokoiset kuvakkeet (scripts/make-icons.py): pienet koot on piirretty erikseen
 # teräviksi, joten PyInstallerin ei tarvitse pienentää 1024 px:n PNG:tä.
 _ICON_FILE = {"win32": "icon.ico", "darwin": "icon.icns"}.get(sys.platform, "icon.png")
@@ -58,6 +60,47 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+
+
+def windows_version_info():
+    """Exe:n versiotiedot. Windows näyttää FileDescriptionin sovelluksen nimenä
+    (kiinnitetty kuvake, Tehtävienhallinta, Avaa sovelluksessa); ilman niitä nimi olisi
+    tiedostonimi OpintosuunnitelmanTayttaja."""
+    from PyInstaller.utils.win32.versioninfo import (
+        FixedFileInfo,
+        StringFileInfo,
+        StringStruct,
+        StringTable,
+        VarFileInfo,
+        VarStruct,
+        VSVersionInfo,
+    )
+
+    numbers = (*(int(n) for n in __version__.split(".")), 0)
+    return VSVersionInfo(
+        ffi=FixedFileInfo(filevers=numbers, prodvers=numbers),
+        kids=[
+            StringFileInfo(
+                [
+                    StringTable(
+                        "040b04b0",  # suomi, Unicode
+                        [
+                            StringStruct("CompanyName", "Matti Seise"),
+                            StringStruct("FileDescription", APP_TITLE),
+                            StringStruct("FileVersion", __version__),
+                            StringStruct("InternalName", APP_SLUG),
+                            StringStruct("OriginalFilename", f"{APP_SLUG}.exe"),
+                            StringStruct("ProductName", APP_TITLE),
+                            StringStruct("ProductVersion", __version__),
+                        ],
+                    )
+                ]
+            ),
+            VarFileInfo([VarStruct("Translation", [0x040B, 1200])]),
+        ],
+    )
+
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -69,6 +112,7 @@ exe = EXE(
     upx=False,
     console=False,
     icon=ICON,
+    version=windows_version_info() if sys.platform == "win32" else None,
 )
 
 coll = COLLECT(
@@ -88,8 +132,8 @@ if sys.platform == "darwin":
         icon=ICON,
         bundle_identifier="fi.seise.opintosuunnitelmantayttaja",
         info_plist={
-            "CFBundleShortVersionString": "2.6.0",
-            "CFBundleVersion": "2.6.0",
+            "CFBundleShortVersionString": __version__,
+            "CFBundleVersion": __version__,
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "12.0",
             "NSHumanReadableCopyright": "Matti Seise",

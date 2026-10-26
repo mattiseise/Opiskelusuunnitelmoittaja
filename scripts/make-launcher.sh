@@ -2,6 +2,7 @@
 # Tekee kehityskäynnistimen macOS:lle: ~/Applications/Opintosuunnitelman muokkaaja.app
 # Käynnistin ajaa `uv run suunnitelmoittaja-gui` tästä repokansiosta, joten koodimuutokset
 # näkyvät heti ilman PyInstaller-buildia. Ikoni on packaging/icon.icns (scripts/make-icons.py).
+# Windowsin vastine: scripts/make-launcher.ps1.
 #
 #   scripts/make-launcher.sh            → ~/Applications/Opintosuunnitelman muokkaaja.app
 #   scripts/make-launcher.sh --dock     → sama + lisää Dockiin

@@ -184,6 +184,19 @@ uv sync --extra gui
 uv run suunnitelmoittaja-gui
 ```
 
+**Käynnistä-valikon pikakuvake kehitysversiolle** (nimi *Opintosuunnitelman muokkaaja*,
+oma kuvake; vanhat *Opintosuunnitelmoittaja*- ja *(DEV)*-pikakuvakkeet poistetaan):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\make-launcher.ps1
+```
+
+Pikakuvake käynnistää sovelluksen `uvw.exe`:llä (jos uv on PATHissa) tai repon
+`Kaynnista-GUI.cmd`:llä. Sillä on sama AppUserModelID kuin kehitysversion prosessilla, joten
+tehtäväpalkki näyttää sovelluksen nimen ja kuvakkeen eikä Pythonin. Irrota vanha kiinnitys ja
+kiinnitä uusi Käynnistä-valikosta (hiiren oikea → *Kiinnitä*). Aja skripti uudelleen, jos
+repokansio siirtyy.
+
 **Oma paketti** (.zip kansioon `dist\`):
 
 ```powershell
