@@ -308,6 +308,10 @@ tarkistaa uusimman; kun päivitys on saatavilla, napin teksti on *Päivitys saat
 etukäteen; ristiriita keskeyttää päivityksen koskematta tiedostoihin. Paketoitu sovellus
 vertaa versionumeroa GitHubin uusimpaan Releaseen ja avaa lataussivun.
 
+Päivitys ei koske asetuskansioon (Tiedosto → *Avaa asetuskansio*) kopioituun Exceliin eikä
+asetuksiin: ne ovat käyttäjän omia ja säilyvät sellaisinaan. Uusi versio tuo mukanaan uuden
+Excel-pohjan, mutta se kopioidaan asetuskansioon vain, jos siellä ei vielä ole Exceliä.
+
 **Opettajan yhteystiedot alimmaksi riviksi.** Asetukset avautuu *Opettaja*-välilehteen: nimi,
 sähköposti ja puhelin. Teksti kirjoitetaan oletuksena *Suoritustapa*-kenttään (muutettavissa
 *Teksti kenttään* -valinnasta).

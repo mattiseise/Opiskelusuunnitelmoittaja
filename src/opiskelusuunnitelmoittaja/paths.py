@@ -53,7 +53,11 @@ def user_data_dir() -> Path:
 
 
 def ensure_user_files() -> Path:
-    """Luo data-hakemisto ja kopioi oletustiedostot sinne, jos ne puuttuvat."""
+    """Luo data-hakemisto ja kopioi oletustiedostot sinne, jos ne puuttuvat.
+
+    Olemassa olevaa tiedostoa ei koskaan korvata: päivitys tuo paketin mukana uudet pohjat,
+    mutta käyttäjän oma Excel ja asetukset säilyvät (tests/test_paths.py).
+    """
     target = user_data_dir()
     target.mkdir(parents=True, exist_ok=True)
     for name in USER_FILES:
